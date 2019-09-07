@@ -8,7 +8,7 @@
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug = false;
-bool m_simulation = true;
+bool m_simulation = false;
 TDatabasePDG db;
 
 void virtualframe(TLorentzVector * v1,
@@ -21,6 +21,19 @@ void virtualframe(TLorentzVector * v1,
   v2->Boost(0,0,-boost);
 }
 
+Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
+{
+  TVector3 Vhelp(0.,0.,1.0);
+  TVector3 gamma = gamma_vir.Vect();
+  Double_t phi_z = TMath::Pi()-gamma.Phi();
+  pion.RotateZ(phi_z);
+  gamma.RotateZ(phi_z);
+  Double_t phi_y = gamma.Angle(Vhelp);
+  pion.RotateY(phi_y);
+  //gamma.RotateY(phi_y);
+  return pion.Phi();
+}
+
 void plot(TGraph *gr, TString title)
 {
   TString corr;
@@ -31,6 +44,16 @@ void plot(TGraph *gr, TString title)
   new TCanvas();
   gr->Draw("AP");
   //cout <<  gr->GetCorrelationFactor() << endl;
+}
+
+void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
+  auto c1 = new TCanvas();
+  c1->SetCanvasSize(800,800);
+  //c1->SetLeftMargin(0.15);
+  c1->SetRightMargin(0.15);
+  h2->Draw(options);
+  c1->SaveAs(out_filename);
+  delete c1;
 }
 
 void ridge_plot(TH2 *h2, TString out_name)
@@ -141,6 +164,8 @@ void ridge()
   TTreeReaderArray<Float_t> py(th,"Py");
   TTreeReaderArray<Float_t> pz(th,"Pz");
   //TTreeReaderArray<Float_t> E(th,"E"); // this isnt on CFF
+  TTreeReaderArray<Float_t> tpq(th,"ThetaPQ");
+  TTreeReaderArray<Float_t> ppq(th,"PhiPQ");
 
   TTreeReaderValue<Float_t> epx(e,"Pex");
   TTreeReaderValue<Float_t> epy(e,"Pey");
@@ -169,12 +194,12 @@ void ridge()
 		       30,-1.5,1.5, 30,-1.5,1.5);
 
   TH2 * ns = new TH2F("Signal Distribution, lab frame (theta)",
-		      "N_{s}(#Delta#phi, #Delta#theta);#Delta#theta;#Delta#phi",
+		      "N_{s}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
 		      16,-4.0,4.0,
 		      16,-4.0,4.0);
 
   TH2 * ns_eta = new TH2F("Signal Distribution, lab frame",
-			  "N_{s}(#Delta#phi, #Delta#eta);#Delta#eta;#Delta#phi",
+			  "N_{s}(#Delta#eta, #Delta#phi);#Delta#eta;#Delta#phi",
 			  16,-4.0,4.0,
 			  16,-4.0,4.0);
   
@@ -182,6 +207,28 @@ void ridge()
 			  "N_{s}(#Delta#phi, #Delta#theta), #gamma^{*} frame;#Delta#theta;#Delta#phi",
 			  16,-4.0,4.0,
 			  16,-4.0,4.0);
+
+  TH2 * ns_pqf = new TH2F("Signal Distribution, PQ frame",
+			  "N_{s}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
+			  16,-4.0,4.0,
+			  16,-4.0,4.0);
+  
+  TH2 * reco = new TH2F("Reconstructed angles",
+			"Reconstructed #pi^{#pm};#phi;#theta",
+			72,-TMath::Pi(),TMath::Pi(),
+			36,0.0,TMath::Pi());
+  TH2 * reco_PQ = new TH2F("Reconstructed angles, PQ frame",
+			   "Reconstructed #pi^{#pm};#phi_{PQ};#theta_{PQ}",
+			   72,-TMath::Pi(),TMath::Pi(),
+			   36,0.0,TMath::Pi());
+
+  TH2 * reco_eta = new TH2F("Reconstructed pions, eta",
+			    "Reconstructed #pi^{#pm};#phi;#eta",
+			    72,-TMath::Pi(),TMath::Pi(),
+			    80,-2.0,4.0);
+			  
+  
+  
   
   while ( th.Next() ){
     e.Next();
@@ -214,26 +261,7 @@ void ridge()
     */
     if ( pos_pions.size() == 0  || neg_pions.size() == 0 )
       continue;
-        
-    //for ( int i = 0; i < pos_pions.size(); i++ ) {
-    for ( auto i: pos_pions ) {
-      TVector3 piplus (px[i],py[i],pz[i]);
-      Float_t phiplus    = piplus.Phi();
-      Float_t thetaplus  = piplus.Theta();
-      Float_t etaplus    = piplus.Eta();
-      //for ( int j = 0; j < neg_pions.size(); j++ ) {
-      for ( auto j: neg_pions ) {
-	TVector3 piminus (px[j],py[j],pz[j]);
-	Float_t phiminus    = piminus.Phi();
-	Float_t thetaminus  = piminus.Theta();
-	Float_t etaminus    = piminus.Eta();
-	ns->Fill(thetaplus-thetaminus,phiplus-phiminus);
-	ns_eta->Fill(etaplus-etaminus,phiplus-phiminus);
-      }
-    }
 
-    // this analysis doesn't use the virtual photon frame
-    /*
     // virtual photon frame is per event
     Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
     if ( scattered_energy < 0.005 )
@@ -244,6 +272,47 @@ void ridge()
       (-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy);
     TLorentzVector initial_photon = virtual_photon;
     Double_t Egamma = virtual_photon.E();
+    
+    bool fill_neg = true;
+    for ( auto i: pos_pions ) {
+      TVector3 piplus (px[i],py[i],pz[i]);
+      Float_t phiplus      = piplus.Phi();
+      Float_t thetaplus    = piplus.Theta();
+      Float_t etaplus      = piplus.Eta();
+      reco->Fill(phiplus,thetaplus);
+      reco_eta->Fill(phiplus,etaplus);
+
+      TVector3 gammav_rot  = virtual_photon.Vect();
+      Float_t thetaPQplus  = gammav_rot.Angle(piplus);
+      Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
+      reco_PQ->Fill(phiPQplus,thetaPQplus);
+      
+      for ( auto j: neg_pions ) {
+	TVector3 piminus (px[j],py[j],pz[j]);
+	Float_t phiminus     = piminus.Phi();
+	Float_t thetaminus   = piminus.Theta();
+	Float_t etaminus     = piminus.Eta();
+	
+	TVector3 gammav_rot   = virtual_photon.Vect();
+	Float_t thetaPQminus  = gammav_rot.Angle(piminus);
+	Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
+	
+	ns->Fill(thetaplus-thetaminus,phiplus-phiminus);
+	ns_eta->Fill(etaplus-etaminus,phiplus-phiminus);
+	ns_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	if ( fill_neg ){ // fill "acceptance" histograms once only
+	  reco->Fill(phiminus,thetaminus);
+	  reco_eta->Fill(phiminus,etaminus);
+	  reco_PQ->Fill(phiPQminus,thetaPQminus);
+	}
+	fill_neg = false;
+	//ns_PQ->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+      }
+    }
+
+    // this analysis doesn't use the virtual photon frame
+    
+    /*
     Double_t angle1 = TMath::Pi() + atan2((*epy),(*epx));
     virtual_photon.RotateZ(-angle1);
 
@@ -310,9 +379,17 @@ void ridge()
 
   ridge_plot(ns,"single_ridge_theta.pdf");
   ridge_plot(ns_eta,"single_ridge_eta.pdf");
+  ridge_plot(ns_pqf,"single_ridge_PQ.pdf");
 
   ridge_plot(ns,"single_ridge_theta.png");
   ridge_plot(ns_eta,"single_ridge_eta.png");
-    
+  ridge_plot(ns_pqf,"single_ridge_PQ.png");
+
+
+  
+  export_hist(reco,out_path+"reco.png");
+  export_hist(reco_eta,out_path+"reco_eta.png");
+  export_hist(reco_PQ,out_path+"reco_PQ.png");
+  
   cout << "finished correctly" << endl;
 }
