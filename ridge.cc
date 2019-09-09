@@ -95,7 +95,7 @@ void ridge_plot(TH2 *h2, TString out_name)
   out_filename = out_path+"projy_"+out_name;
   c1->SaveAs(out_filename);
 
-  // comment next line if not running on batch mode I guess
+  // comment next lines if not running on batch mode I guess
   delete c1;
   delete projx;
   delete projy;
@@ -193,30 +193,47 @@ void ridge()
 		       "#gamma^{*}-P frame;p_{y}(#pi^{+});p_{y}(#pi^{-})",
 		       30,-1.5,1.5, 30,-1.5,1.5);
 
+  int nsbinsx = 32;
+  int nsbinsy = nsbinsx*2.5;
+  double nsedgex = TMath::Pi()*1.0;
+  double nsedgey = TMath::Pi()*2.5;
+  
   TH2 * ns = new TH2F("Signal Distribution, lab frame (theta)",
 		      "N_{s}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
-		      16,-4.0,4.0,
-		      16,-4.0,4.0);
+		      nsbinsx,-nsedgex,nsedgex,
+		      nsbinsy,-nsedgey,nsedgey);
 
   TH2 * ns_eta = new TH2F("Signal Distribution, lab frame",
 			  "N_{s}(#Delta#eta, #Delta#phi);#Delta#eta;#Delta#phi",
-			  16,-4.0,4.0,
-			  16,-4.0,4.0);
+			  nsbinsx,-nsedgex,nsedgex,
+			  nsbinsy,-nsedgey,nsedgey);
   
   TH2 * ns_vir = new TH2F("Signal Distribution, #gamma^{*} frame",
 			  "N_{s}(#Delta#phi, #Delta#theta), #gamma^{*} frame;#Delta#theta;#Delta#phi",
-			  16,-4.0,4.0,
-			  16,-4.0,4.0);
+			  nsbinsx,-nsedgex,nsedgex,
+			  nsbinsy,-nsedgey,nsedgey);
 
   TH2 * ns_pqf = new TH2F("Signal Distribution, PQ frame",
 			  "N_{s}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
-			  16,-4.0,4.0,
-			  16,-4.0,4.0);
+			  nsbinsx,-nsedgex,nsedgex,
+			  nsbinsy,-nsedgey,nsedgey);
   
   TH2 * reco = new TH2F("Reconstructed angles",
 			"Reconstructed #pi^{#pm};#phi;#theta",
 			72,-TMath::Pi(),TMath::Pi(),
 			36,0.0,TMath::Pi());
+
+  TH2 * reco_plus = new TH2F("Reconstructed angles, #pi^{+}",
+			     "Reconstructed #pi^{+};#phi;#theta",
+			     72,-TMath::Pi(),TMath::Pi(),
+			     36,0.0,TMath::Pi());
+
+  TH2 * reco_minus = new TH2F("Reconstructed angles, #pi^{-}",
+			      "Reconstructed #pi^{-};#phi;#theta",
+			      72,-TMath::Pi(),TMath::Pi(),
+			      36,0.0,TMath::Pi());
+
+  
   TH2 * reco_PQ = new TH2F("Reconstructed angles, PQ frame",
 			   "Reconstructed #pi^{#pm};#phi_{PQ};#theta_{PQ}",
 			   72,-TMath::Pi(),TMath::Pi(),
@@ -280,6 +297,7 @@ void ridge()
       Float_t thetaplus    = piplus.Theta();
       Float_t etaplus      = piplus.Eta();
       reco->Fill(phiplus,thetaplus);
+      reco_plus->Fill(phiplus,thetaplus);
       reco_eta->Fill(phiplus,etaplus);
 
       TVector3 gammav_rot  = virtual_photon.Vect();
@@ -302,6 +320,7 @@ void ridge()
 	ns_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
 	if ( fill_neg ){ // fill "acceptance" histograms once only
 	  reco->Fill(phiminus,thetaminus);
+	  reco_minus->Fill(phiminus,thetaminus);
 	  reco_eta->Fill(phiminus,etaminus);
 	  reco_PQ->Fill(phiPQminus,thetaPQminus);
 	}
@@ -387,9 +406,12 @@ void ridge()
 
 
   
-  export_hist(reco,out_path+"reco.png");
+  export_hist(reco,out_path+"reco_theta.png");
   export_hist(reco_eta,out_path+"reco_eta.png");
   export_hist(reco_PQ,out_path+"reco_PQ.png");
+
+  export_hist(reco_plus,out_path+"reco_theta_plus.png");
+  export_hist(reco_minus,out_path+"reco_theta_minus.png");
   
   cout << "finished correctly" << endl;
 }
