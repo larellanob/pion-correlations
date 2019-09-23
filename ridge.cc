@@ -5,21 +5,380 @@
 #include "TTreeReaderValue.h"
 #include "TLorentzVector.h"
 #include "TDatabasePDG.h"
+#include "TH2.h"
+#include "TCanvas.h"
+#include "TView.h"
+#include "TStyle.h"
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
-bool m_debug = false;
+bool m_debug      = false;
 bool m_simulation = false;
+bool old_plus     = false; // if false, use old_minus
+bool gExport_pdf  = false;
+bool gExport_png  = true;
 TDatabasePDG db;
 
-void virtualframe(TLorentzVector * v1,
-		  double angle1, double angle2, double boost)
+Float_t PhiPQ(TVector3, TLorentzVector);
+void export_hist(TH2 *, TString, TString options = "colz");
+void ridge_plot(TH2 *, TString);
+void side_by_side(TH2 *,TH2 *, TString);
+void initialize_histograms(int nsbinsx, int nsbinsy, double nsedgex, double nsedgey);
+
+// Histograms that will be accompanying us tonight:
+TH2 * ns, * ns_eta, * ns_pqf;
+TH2 * reco, * reco_plus, * reco_minus, * reco_PQ, * reco_eta;
+TH2 * nm, *nm_pqf;
+// if you need more, add them to function 'initialize_histograms' at
+// the bottom
+  
+
+// MAIN
+void ridge()
 {
-  TLorentzVector *v2;
-  v2 = v1;
-  v2->RotateZ(-angle1);
-  v2->RotateY(-angle2);
-  v2->Boost(0,0,-boost);
-}
+  if ( m_simulation == true ) {
+    out_path+="simulation/";
+  } else {
+    out_path += "data/";
+  }
+  
+  TFile *f;
+  Double_t kEbeam;
+  if ( m_simulation ) {
+    f = new TFile("/home/luciano/Physics/CLAS/data/tree_output.root");
+    kEbeam = 11.0;
+  } else {
+    f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
+    kEbeam = 5.014;
+  }
+  const Double_t kMpi   = 0.13957;
+  const Double_t kMprt  = 0.938272;
+  float rhomass = db.GetParticle(113)->Mass();
+
+
+  // tree reader for thrown particles and scattered electron
+  TTreeReader th("tree_data",f);
+  TTreeReader e("e_rec",f);
+    
+  TTreeReaderArray<Float_t> pid(th,"pid");
+  TTreeReaderArray<Float_t> q2(th,"Q2");
+  TTreeReaderArray<Float_t> px(th,"Px");
+  TTreeReaderArray<Float_t> py(th,"Py");
+  TTreeReaderArray<Float_t> pz(th,"Pz");
+
+  TTreeReaderValue<Float_t> epx(e,"Pex");
+  TTreeReaderValue<Float_t> epy(e,"Pey");
+  TTreeReaderValue<Float_t> epz(e,"Pez");
+  TTreeReaderValue<Float_t> eq2(e,"Q2");
+  TTreeReaderValue<Float_t> ew(e,"W");
+    
+  cout << "working" << endl;
+
+  TH1 * h1 = new TH1F("h1",
+		      "Inv. mass of (#pi^{+} #pi^{-});M_{sum};counts",
+		      50, 0, 1.5);
+  std::vector<int> pos_pions;
+  std::vector<int> neg_pions;
+  std::vector<TLorentzVector> Particles;
+
+  std::vector<TVector3> old_piplus;
+  std::vector<TVector3> old_piminus;
+  
+  UInt_t events = 0;
+  int counter=0;
+
+
+  // histograms
+  int nsbinsx = 32;
+  int nsbinsy = nsbinsx*2.5;
+  double nsedgex = TMath::Pi()*1.0;
+  double nsedgey = TMath::Pi()*2.5;
+  
+  initialize_histograms(nsbinsx, nsbinsy, nsedgex, nsedgey);
+
+  TH2 * pippim = new TH2F("pippim",
+			  "#pi^{+}#pi^{-} same event;N_{#pi^{+}};N_{#pi^{-}}",
+			  8,-0.5,7.5,8,-0.5,7.5);
+  TH2 * pippim_ppp = new TH2F("pippim_ppp",
+			      "#pi^{+}#pi^{-} past #pi^{+};N_{#pi^{+}};N_{#pi^{-}}",
+			      8,-0.5,7.5,8,-0.5,7.5);
+  TH2 * pippim_ppm = new TH2F("pippim_ppm",
+			      "#pi^{+}#pi^{-} past #pi^{-};N_{#pi^{+}};N_{#pi^{-}}",
+			      8,-0.5,7.5,8,-0.5,7.5);
+  
+  if ( m_debug )
+    cout << "DEBUG: entering main tree reading loop" << endl;
+  // main file/tree reading loop
+  TLorentzVector virtual_photon;
+  TLorentzVector oldgamma;
+  while ( th.Next() ) {
+    e.Next();
+    events++;
+    
+    Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
+    if ( scattered_energy < 0.005 )
+      cout << "WARNING: Low e' energy " << scattered_energy << endl; 
+    if ( scattered_energy > kEbeam  )
+      cout << "WARNING: High e' energy = " <<  scattered_energy << endl;
+
+
+    // virtual photon frame is per event
+    oldgamma = virtual_photon; // true old gamma
+
+    virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
+    //oldgamma = virtual_photon; // actually the same old gamma
+    
+    if ( events % 1000000 == 0 )
+      cout << events << " events" << endl;
+
+    if ( *ew < 2.0 || *eq2 < 1.0 ) // DIS cut
+      continue;
+
+    // Electron
+    
+    pos_pions.clear();
+    neg_pions.clear();
+    for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+      if ( pid[i] == 211 ) {
+	pos_pions.push_back(i);
+      }
+      if ( pid[i] == -211 ) {
+	neg_pions.push_back(i);
+      }
+    }
+
+    /*
+    if ( pos_pions.size() != neg_pions.size() )
+      continue;
+    */
+    
+    if ( pos_pions.size() == 0  || neg_pions.size() == 0 )
+      continue;
+
+    if ( m_debug )
+      cout << "DEBUG: Entering mutli event filling" << endl;
+    // MULTI EVENT FILLING
+
+    // note: pos_pions and neg_pions store the integer index of the
+    // pions position within the event, whereas old_piminus and
+    // old_piplus store the whole TVector3 pion data. The global
+    // variable old_plus defines wheter the old pions + or - are used
+    
+    // OLD PI MINUS
+    if ( old_piminus.size() != 0 && !old_plus && events > 1 ) {
+      for ( auto i: pos_pions ) {
+	TVector3 piplus (px[i],py[i],pz[i]);
+	Float_t phiplus      = piplus.Phi();
+	Float_t thetaplus    = piplus.Theta();
+	
+	TVector3 gammav_rot  = virtual_photon.Vect();
+	Float_t thetaPQplus  = gammav_rot.Angle(piplus);
+	Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
+	//Float_t etaplus      = piplus.Eta(); // just implement theta for now
+	for ( auto piminus: old_piminus ) {
+	  Float_t phiminus     = piminus.Phi();
+	  Float_t thetaminus   = piminus.Theta();
+
+	  TVector3 gammav_rot  = oldgamma.Vect();
+	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
+	  Float_t phiPQminus    = PhiPQ(piminus,oldgamma);
+	  nm->Fill(thetaplus-thetaminus,phiplus-phiminus);
+	  nm_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	}
+      }
+    }
+
+    
+    // OLD PI PLUS
+    if ( old_piplus.size() != 0 && old_plus && events > 1 ) {
+      for ( auto piplus: old_piplus ) {
+	Float_t phiplus      = piplus.Phi();
+	Float_t thetaplus    = piplus.Theta();
+	
+	TVector3 gammav_rot  = oldgamma.Vect();
+	Float_t thetaPQplus  = gammav_rot.Angle(piplus);
+	Float_t phiPQplus    = PhiPQ(piplus,oldgamma);
+	//Float_t etaplus      = piplus.Eta(); // just implement theta for now
+	for ( auto i: neg_pions ) {
+	  TVector3 piminus (px[i],py[i],pz[i]);
+	  Float_t phiminus     = piminus.Phi();
+	  Float_t thetaminus   = piminus.Theta();
+
+	  TVector3 gammav_rot  = virtual_photon.Vect();
+	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
+	  Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
+	  nm->Fill(thetaplus-thetaminus,phiplus-phiminus); 
+	  nm_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	}
+      }
+    }
+    
+    pippim_ppp->Fill(old_piplus.size(),neg_pions.size());
+    pippim_ppm->Fill(pos_pions.size(),old_piminus.size());
+    pippim->Fill(pos_pions.size(),neg_pions.size());
+    old_piplus.clear();
+    old_piminus.clear();
+
+
+    if ( m_debug )
+      cout << "DEBUG: Entering same event filling" << endl;
+    // SAME EVENT FILLING
+    bool fill_neg = true;
+
+    if ( m_debug )
+      cout << "DEBUG: entering loop of pos_pions" << endl;
+    for ( auto i: pos_pions ) {
+      TVector3 piplus (px[i],py[i],pz[i]);
+      Float_t phiplus      = piplus.Phi();
+      Float_t thetaplus    = piplus.Theta();
+      Float_t etaplus      = piplus.Eta();
+      if ( m_debug )
+	cout << "DEBUG: Attempting to fill some histograms" << endl;
+      reco->Fill(phiplus,thetaplus);
+      reco_plus->Fill(phiplus,thetaplus);
+      reco_eta->Fill(phiplus,etaplus);
+      if ( m_debug )
+	cout << "DEBUG: Successfully filled some histograms" << endl;
+      old_piplus.push_back(piplus);
+
+      TVector3 gammav_rot  = virtual_photon.Vect();
+      Float_t thetaPQplus  = gammav_rot.Angle(piplus);
+      Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
+      reco_PQ->Fill(phiPQplus,thetaPQplus);
+      
+      if ( m_debug )
+	cout << "DEBUG: what seems to be the problem?" << endl;
+      for ( auto j: neg_pions ) {
+	TVector3 piminus (px[j],py[j],pz[j]);
+	Float_t phiminus     = piminus.Phi();
+	Float_t thetaminus   = piminus.Theta();
+	Float_t etaminus     = piminus.Eta();
+	
+	TVector3 gammav_rot   = virtual_photon.Vect();
+	Float_t thetaPQminus  = gammav_rot.Angle(piminus);
+	Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
+
+	ns->Fill(thetaplus-thetaminus,phiplus-phiminus);
+	ns_eta->Fill(etaplus-etaminus,phiplus-phiminus);
+	ns_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	if ( fill_neg ) { // fill "acceptance" histograms once only
+	  old_piminus.push_back(piminus);
+	  reco->Fill(phiminus,thetaminus);
+	  reco_minus->Fill(phiminus,thetaminus);
+	  reco_eta->Fill(phiminus,etaminus);
+	  reco_PQ->Fill(phiPQminus,thetaPQminus);
+	}
+      }
+      fill_neg = false;
+    }
+  }
+
+  cout << "ran through this many events: " << events << endl;
+  cout << "processed this many events: " << counter << endl;
+  
+  //side_by_side(ns,ns_vir,"NS_lab_virtual.png");
+
+  TString multi_method;
+  if ( old_plus )
+    multi_method = "_pastPiPlus";
+  else if ( !old_plus )
+    multi_method = "_pastPiMinus";
+
+  
+  if ( gExport_pdf ) {
+    ridge_plot(ns,"single_ridge_theta.pdf");
+    ridge_plot(ns_eta,"single_ridge_eta.pdf");
+    ridge_plot(ns_pqf,"single_ridge_PQ.pdf");
+    ridge_plot(nm,"single_ridge_theta_MULTI"+multi_method+".pdf");
+    ridge_plot(nm_pqf,"single_ridge_theta_MULTI_PQ"+multi_method+".pdf");
+  }
+
+  if ( gExport_png ) {
+    ridge_plot(ns,"single_ridge_theta.png");
+    ridge_plot(ns_eta,"single_ridge_eta.png");
+    ridge_plot(ns_pqf,"single_ridge_PQ.png");
+    ridge_plot(nm,"single_ridge_theta_MULTI"+multi_method+".png");
+    ridge_plot(nm_pqf,"single_ridge_theta_MULTI_PQ"+multi_method+".png");
+    
+    export_hist(reco,out_path+"reco_theta.png");
+    export_hist(reco_eta,out_path+"reco_eta.png");
+    export_hist(reco_PQ,out_path+"reco_PQ.png");
+    
+    export_hist(reco_plus,out_path+"reco_theta_plus.png");
+    export_hist(reco_minus,out_path+"reco_theta_minus.png");
+
+    export_hist(pippim,out_path+"pions_SameEvent.png","colztext");
+    export_hist(pippim_ppp,out_path+"pions_PastPiP.png","colztext");
+    export_hist(pippim_ppm,out_path+"pions_PastPiM.png","colztext");
+  }
+
+  TH2 * ndiv = new TH2F("Correlations, lab frame (theta)",
+			"N_{s}/N_{m}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
+			nsbinsx,-nsedgex,nsedgex,
+			nsbinsy,-nsedgey,nsedgey);
+
+  TH2 * ndiv_pqf = new TH2F("Correlations, PQ frame (theta)",
+			"N_{s}/N_{m}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
+			nsbinsx,-nsedgex,nsedgex,
+			nsbinsy,-nsedgey,nsedgey);
+
+  float ratio;
+  float settle_at = 1.0;
+  for ( int x = 1; x < nsbinsx+1; x++ ) {
+    for ( int y = 1; y < nsbinsy+1; y++ ) {
+      float nsvalue = ns->GetBinContent(x,y);
+      float nmvalue = nm->GetBinContent(x,y);
+      float nsvalue_pqf = ns_pqf->GetBinContent(x,y);
+      float nmvalue_pqf = nm_pqf->GetBinContent(x,y);
+
+      if ( nsvalue < 500.0 || nmvalue < 500.0 ) {
+	ndiv->SetBinContent(x,y,settle_at);	
+      } else {
+	ndiv->SetBinContent(x,y,nsvalue/nmvalue);
+      }
+
+      if ( nsvalue_pqf < 500.0 || nmvalue_pqf < 500.0 ) {
+	ndiv_pqf->SetBinContent(x,y,settle_at);
+      } else {
+	ndiv_pqf->SetBinContent(x,y,nsvalue_pqf/nmvalue_pqf);
+      }
+
+      /*
+      if ( nm->GetBinContent(x,y) != 0 ) {
+	ratio = (ns->GetBinContent(x,y))/(nm->GetBinContent(x,y));
+	ndiv->GetBin(x,y);
+	
+	if ( ratio > 1.8 || ratio < 0.2) {
+	  cout << ns->GetBinContent(x,y) << " / "
+	       << nm->GetBinContent(x,y) << " = "
+	       << ratio << endl;
+	  ndiv->SetBinContent(x,y,settle_at);
+	  continue;
+	}
+	ndiv->SetBinContent(x,y,ratio);
+
+	
+      } else {
+	ndiv->SetBinContent(x,y,settle_at);
+      }
+      */
+    }
+  }
+
+  if ( gExport_pdf ) {
+    ridge_plot(ndiv,"single_ridge_theta_NDIV"+multi_method+".pdf");
+    ridge_plot(ndiv_pqf,"single_ridge_theta_NDIV_PQ"+multi_method+".pdf");
+  }
+  if ( gExport_png) {
+    ridge_plot(ndiv,"single_ridge_theta_NDIV"+multi_method+".png");
+    ridge_plot(ndiv_pqf,"single_ridge_theta_NDIV_PQ"+multi_method+".png");
+  }
+  cout << "finished correctly" << endl;
+} // END MAIN
+
+
+////////////////////////
+//// FUNCTIONS
+////////////////////////
 
 Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
 {
@@ -34,17 +393,6 @@ Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
   return pion.Phi();
 }
 
-void plot(TGraph *gr, TString title)
-{
-  TString corr;
-  corr =  Form("%.4f",gr->GetCorrelationFactor());
-  gr->SetTitle("Correlation: "+corr+" / "+title);
-  gr->SetMarkerStyle(7);
-  gr->SetMarkerColor(kBlue);
-  new TCanvas();
-  gr->Draw("AP");
-  //cout <<  gr->GetCorrelationFactor() << endl;
-}
 
 void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
   auto c1 = new TCanvas();
@@ -63,7 +411,7 @@ void ridge_plot(TH2 *h2, TString out_name)
   h2->Draw("surf1");
   
   // aesthetics
-  gStyle->SetOptStat(0);
+  //gStyle->SetOptStat(0);
   double theta = -30;
   double phi   = 60;
   h2->GetXaxis()->CenterTitle(true);
@@ -134,284 +482,55 @@ void side_by_side(TH2 *hlab,TH2 *hvir, TString out_filename)
   delete c1;
 }
 
-void ridge()
+void initialize_histograms(int nsbinsx, int nsbinsy, double nsedgex, double nsedgey)
 {
-  if ( m_simulation == true ){
-    out_path+="simulation/";
-  } else {
-    out_path += "data/";
-  }
+  ns = new TH2F("Signal Distribution, lab frame (theta)",
+		"N_{s}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
+		nsbinsx,-nsedgex,nsedgex,
+		nsbinsy,-nsedgey,nsedgey);
   
-  TFile *f;
-  Double_t kEbeam;
-  if ( m_simulation ){
-    f = new TFile("/home/luciano/Physics/CLAS/data/tree_output.root");
-    kEbeam = 11.0;
-  } else {
-    f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
-    kEbeam = 5.014;
-  }
-  const Double_t kMpi   = 0.13957;
-  const Double_t kMprt  = 0.938272;
-  float rhomass = db.GetParticle(113)->Mass();
+  ns_eta = new TH2F("Signal Distribution, lab frame",
+		    "N_{s}(#Delta#eta, #Delta#phi);#Delta#eta;#Delta#phi",
+		    nsbinsx,-nsedgex,nsedgex,
+		    nsbinsy,-nsedgey,nsedgey);
   
-  TTreeReader th("tree_data",f);
-  TTreeReader e("e_rec",f);
-    
-  TTreeReaderArray<Float_t> pid(th,"pid");
-  TTreeReaderArray<Float_t> q2(th,"Q2");
-  TTreeReaderArray<Float_t> px(th,"Px");
-  TTreeReaderArray<Float_t> py(th,"Py");
-  TTreeReaderArray<Float_t> pz(th,"Pz");
-  //TTreeReaderArray<Float_t> E(th,"E"); // this isnt on CFF
-  //TTreeReaderArray<Float_t> tpq(th,"ThetaPQ"); // not on 11GeV ascii file
-  //TTreeReaderArray<Float_t> ppq(th,"PhiPQ"); // not on 11GeV ascii file
-
-  TTreeReaderValue<Float_t> epx(e,"Pex");
-  TTreeReaderValue<Float_t> epy(e,"Pey");
-  TTreeReaderValue<Float_t> epz(e,"Pez");
-  TTreeReaderValue<Float_t> eq2(e,"Q2");
-  TTreeReaderValue<Float_t> ew(e,"W");
-    
-  cout << "working" << endl;
-
-  TH1 * h1 = new TH1F("h1",
-		      "Inv. mass of (#pi^{+} #pi^{-});M_{sum};counts",
-		      50, 0, 1.5);
-  std::vector<int> pos_pions;
-  std::vector<int> neg_pions;
-  std::vector<TLorentzVector> Particles;
+  ns_pqf = new TH2F("Signal Distribution, PQ frame",
+		    "N_{s}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
+		    nsbinsx,-nsedgex,nsedgex,
+		    nsbinsy,-nsedgey,nsedgey);
   
-  UInt_t events = 0;
-  int counter=0;
-
-  TH2 * hpy_lab = new TH2F("hpy_lab",
-			   "Lab frame;p_{y}(#pi^{+});p_{y}(#pi^{-})",
-			   30,-1.5,1.5, 30,-1.5,1.5);
+  reco = new TH2F("Reconstructed angles",
+		  "Reconstructed #pi^{#pm};#phi;#theta",
+		  72,-TMath::Pi(),TMath::Pi(),
+		  36,0.0,TMath::Pi());
   
-  TH2 * hpy_vir = new TH2F("hpy_vir",
-		       "#gamma^{*}-P frame;p_{y}(#pi^{+});p_{y}(#pi^{-})",
-		       30,-1.5,1.5, 30,-1.5,1.5);
-
-  int nsbinsx = 32;
-  int nsbinsy = nsbinsx*2.5;
-  double nsedgex = TMath::Pi()*1.0;
-  double nsedgey = TMath::Pi()*2.5;
+  reco_plus = new TH2F("Reconstructed angles, #pi^{+}",
+		       "Reconstructed #pi^{+};#phi;#theta",
+		       72,-TMath::Pi(),TMath::Pi(),
+		       36,0.0,TMath::Pi());
   
-  TH2 * ns = new TH2F("Signal Distribution, lab frame (theta)",
-		      "N_{s}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
-		      nsbinsx,-nsedgex,nsedgex,
-		      nsbinsy,-nsedgey,nsedgey);
-
-  TH2 * ns_eta = new TH2F("Signal Distribution, lab frame",
-			  "N_{s}(#Delta#eta, #Delta#phi);#Delta#eta;#Delta#phi",
-			  nsbinsx,-nsedgex,nsedgex,
-			  nsbinsy,-nsedgey,nsedgey);
-  
-  TH2 * ns_vir = new TH2F("Signal Distribution, #gamma^{*} frame",
-			  "N_{s}(#Delta#phi, #Delta#theta), #gamma^{*} frame;#Delta#theta;#Delta#phi",
-			  nsbinsx,-nsedgex,nsedgex,
-			  nsbinsy,-nsedgey,nsedgey);
-
-  TH2 * ns_pqf = new TH2F("Signal Distribution, PQ frame",
-			  "N_{s}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
-			  nsbinsx,-nsedgex,nsedgex,
-			  nsbinsy,-nsedgey,nsedgey);
-  
-  TH2 * reco = new TH2F("Reconstructed angles",
-			"Reconstructed #pi^{#pm};#phi;#theta",
+  reco_minus = new TH2F("Reconstructed angles, #pi^{-}",
+			"Reconstructed #pi^{-};#phi;#theta",
 			72,-TMath::Pi(),TMath::Pi(),
 			36,0.0,TMath::Pi());
-
-  TH2 * reco_plus = new TH2F("Reconstructed angles, #pi^{+}",
-			     "Reconstructed #pi^{+};#phi;#theta",
-			     72,-TMath::Pi(),TMath::Pi(),
-			     36,0.0,TMath::Pi());
-
-  TH2 * reco_minus = new TH2F("Reconstructed angles, #pi^{-}",
-			      "Reconstructed #pi^{-};#phi;#theta",
-			      72,-TMath::Pi(),TMath::Pi(),
-			      36,0.0,TMath::Pi());
-
-  
-  TH2 * reco_PQ = new TH2F("Reconstructed angles, PQ frame",
-			   "Reconstructed #pi^{#pm};#phi_{PQ};#theta_{PQ}",
-			   72,-TMath::Pi(),TMath::Pi(),
-			   36,0.0,TMath::Pi());
-
-  TH2 * reco_eta = new TH2F("Reconstructed pions, eta",
-			    "Reconstructed #pi^{#pm};#phi;#eta",
-			    72,-TMath::Pi(),TMath::Pi(),
-			    80,-2.0,4.0);
-			  
   
   
+  reco_PQ = new TH2F("Reconstructed angles, PQ frame",
+		     "Reconstructed #pi^{#pm};#phi_{PQ};#theta_{PQ}",
+		     72,-TMath::Pi(),TMath::Pi(),
+		     36,0.0,TMath::Pi());
   
-  while ( th.Next() ){
-    e.Next();
-    events++;
-    
-    if ( events % 1000000 == 0 )
-      cout << events << " events" << endl;
-
-
-    if ( *ew < 2.0 || *eq2 < 1.0 ) // DIS cut
-      continue;
-
-    // Electron
-    
-    pos_pions.clear();
-    neg_pions.clear();
-    for ( UInt_t i = 0; i < pid.GetSize(); i++ ){
-      if ( pid[i] == 211 ) {
-	pos_pions.push_back(i);
-      }
-      if ( pid[i] == -211 ){
-	neg_pions.push_back(i);
-      }
-    }
-
-    /*
-    if ( pos_pions.size() != neg_pions.size() )
-      continue;
-    
-    */
-    if ( pos_pions.size() == 0  || neg_pions.size() == 0 )
-      continue;
-
-    // virtual photon frame is per event
-    Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
-    if ( scattered_energy < 0.005 )
-      cout << "WARNING: Low e' energy " << scattered_energy << endl; 
-    if ( scattered_energy > kEbeam  )
-      cout << "WARNING: High e' energy = " <<  scattered_energy << endl;
-    TLorentzVector virtual_photon
-      (-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy);
-    TLorentzVector initial_photon = virtual_photon;
-    Double_t Egamma = virtual_photon.E();
-    
-    bool fill_neg = true;
-    for ( auto i: pos_pions ) {
-      TVector3 piplus (px[i],py[i],pz[i]);
-      Float_t phiplus      = piplus.Phi();
-      Float_t thetaplus    = piplus.Theta();
-      Float_t etaplus      = piplus.Eta();
-      reco->Fill(phiplus,thetaplus);
-      reco_plus->Fill(phiplus,thetaplus);
-      reco_eta->Fill(phiplus,etaplus);
-
-      TVector3 gammav_rot  = virtual_photon.Vect();
-      Float_t thetaPQplus  = gammav_rot.Angle(piplus);
-      Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
-      reco_PQ->Fill(phiPQplus,thetaPQplus);
-      
-      for ( auto j: neg_pions ) {
-	TVector3 piminus (px[j],py[j],pz[j]);
-	Float_t phiminus     = piminus.Phi();
-	Float_t thetaminus   = piminus.Theta();
-	Float_t etaminus     = piminus.Eta();
-	
-	TVector3 gammav_rot   = virtual_photon.Vect();
-	Float_t thetaPQminus  = gammav_rot.Angle(piminus);
-	Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
-	
-	ns->Fill(thetaplus-thetaminus,phiplus-phiminus);
-	ns_eta->Fill(etaplus-etaminus,phiplus-phiminus);
-	ns_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
-	if ( fill_neg ){ // fill "acceptance" histograms once only
-	  reco->Fill(phiminus,thetaminus);
-	  reco_minus->Fill(phiminus,thetaminus);
-	  reco_eta->Fill(phiminus,etaminus);
-	  reco_PQ->Fill(phiPQminus,thetaPQminus);
-	}
-	fill_neg = false;
-	//ns_PQ->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
-      }
-    }
-
-    // this analysis doesn't use the virtual photon frame
-    
-    /*
-    Double_t angle1 = TMath::Pi() + atan2((*epy),(*epx));
-    virtual_photon.RotateZ(-angle1);
-
-
-    double numer = kEbeam-(*epz);
-    double denom = virtual_photon.P();
-
-    Double_t angle2;// = acos(numer/denom);
-    
-    if ( numer/denom < TMath::Pi() ){
-      angle2 = acos(numer/denom);
-    } else if ( numer/denom >= TMath::Pi() ){
-      angle2 = 2*TMath::Pi()*acos(numer/denom);
-    }
-    
-    virtual_photon.RotateY(-angle2);
-    Double_t boost  = virtual_photon.P()/(Egamma+kMprt);
-    virtual_photon.Boost(0,0,-boost);
-
- 
-    // lorentz vectors
-    Particles.clear();
-    for ( int i = 0; i < pid.GetSize(); i++ ){
-      float mass = db.GetParticle(pid[i])->Mass();
-      double E = sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]-mass*mass);
-      TLorentzVector v (px[i],py[i],pz[i],E);
-      Particles.push_back(v);
-      virtualframe(&Particles[i],angle1,angle2,boost);	
-    }
-
-
-    /// same as before but on gamma* frame
-    for ( int i = 0; i < pos_pions.size(); i++ ) {
-      TVector3 piplus ( Particles[pos_pions[i]].Px(),
-		        Particles[pos_pions[i]].Py(),
-		        Particles[pos_pions[i]].Pz());
-      Float_t phiplus    = piplus.Phi();
-      Float_t thetaplus  = piplus.Theta();
-      for ( int j = 0; j < neg_pions.size(); j++ ) {
-	TVector3 piminus ( Particles[neg_pions[j]].Px(),
-			   Particles[neg_pions[j]].Py(),
-			   Particles[neg_pions[j]].Pz());
-	Float_t phiminus    = piminus.Phi();
-	Float_t thetaminus  = piminus.Theta();
-	ns_vir->Fill(thetaplus-thetaminus,phiplus-phiminus);
-      }
-    }
-    
-    TLorentzVector vsum_pions;
-    for ( int j = 0; j < min(pos_pions.size(),neg_pions.size()); j++ ){
-      vsum_pions = Particles[neg_pions[j]]+Particles[pos_pions[j]];
-      h1->Fill(vsum_pions.M() );  
-    }
-    
-    //cout << pos_pions.size() << " " << neg_pions.size() << endl;;
-    counter++;
-    */
-  }
-
-  cout << "ran through this many events: " << events << endl;
-  cout << "processed this many events: " << counter << endl;
+  reco_eta = new TH2F("Reconstructed pions, eta",
+		      "Reconstructed #pi^{#pm};#phi;#eta",
+		      72,-TMath::Pi(),TMath::Pi(),
+		      80,-2.0,4.0);
   
-  //side_by_side(ns,ns_vir,"NS_lab_virtual.png");
-
-  ridge_plot(ns,"single_ridge_theta.pdf");
-  ridge_plot(ns_eta,"single_ridge_eta.pdf");
-  ridge_plot(ns_pqf,"single_ridge_PQ.pdf");
-
-  ridge_plot(ns,"single_ridge_theta.png");
-  ridge_plot(ns_eta,"single_ridge_eta.png");
-  ridge_plot(ns_pqf,"single_ridge_PQ.png");
-
-
-  
-  export_hist(reco,out_path+"reco_theta.png");
-  export_hist(reco_eta,out_path+"reco_eta.png");
-  export_hist(reco_PQ,out_path+"reco_PQ.png");
-
-  export_hist(reco_plus,out_path+"reco_theta_plus.png");
-  export_hist(reco_minus,out_path+"reco_theta_minus.png");
-  
-  cout << "finished correctly" << endl;
+  nm = new TH2F("Multi events, lab frame (theta)",
+		"N_{m}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
+		nsbinsx,-nsedgex,nsedgex,
+		nsbinsy,-nsedgey,nsedgey);
+  nm_pqf = new TH2F("Multi events, PQ frame (theta)",
+		    "N_{m}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
+		    nsbinsx,-nsedgex,nsedgex,
+		    nsbinsy,-nsedgey,nsedgey);  
 }
