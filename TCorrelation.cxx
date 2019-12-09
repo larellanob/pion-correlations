@@ -9,10 +9,14 @@ private:
   TH2F fRecoMinus;
   TString fVar1;
   TString fVar2;
-  int nbinsx = 32;
-  int nbinsy = nbinsx*2.5;
-  double nedgex = TMath::Pi()*1.0;
-  double nedgey = TMath::Pi()*2.5;
+  int fNbinsx = 32;
+  int fNbinsy = fNbinsx;
+  //double nedgex = TMath::Pi()*1.0;
+  double fBinMaxX = 180.;
+  double fBinMinX = -180;
+  //double nedgey = TMath::Pi()*2.5;
+  double fBinMaxY = 190.;
+  double fBinMinY = -10.;
 public:
   TCorrelation(TString, TString);
   TH2F GetSE()   { return fSameEvent2D;   }
@@ -43,6 +47,7 @@ public:
     fRecoMinus.Fill(var1,var2, weight);
   }
   void FillCorrelation();
+  void SetBins2D(Float_t, Float_t, Float_t, Float_t, Float_t, Float_t);
 };
 
 TCorrelation::TCorrelation(TString var1, TString var2)
@@ -51,13 +56,13 @@ TCorrelation::TCorrelation(TString var1, TString var2)
   fVar2 = var2;
   TH2F ns("ns_"+var1+"_"+var2,
 	  "N_{s}(#Delta#"+var2+", #Delta#"+var1+");#Delta#"+var2+";#Delta#"+var1,
-	  nbinsx,-nedgex,nedgex,
-	  nbinsy,-nedgey,nedgey
+	  fNbinsx,fBinMinX,fBinMaxX,
+	  fNbinsy,fBinMinY,fBinMaxY
 	  );
   TH2F nm("nm_"+var1+"_"+var2,
 	  "N_{m}(#Delta#"+var2+", #Delta#"+var1+");#Delta#"+var2+";#Delta#"+var1,
-	  nbinsx,-nedgex,nedgex,
-	  nbinsy,-nedgey,nedgey
+	  fNbinsx,fBinMinX,fBinMaxX,
+	  fNbinsy,fBinMinY,fBinMaxY
 	  );
   fSameEvent2D  = ns;
   fMultiEvent2D = nm;
@@ -67,12 +72,12 @@ void TCorrelation::FillCorrelation()
 {
   TH2F ndiv("nc_"+fVar1+"_"+fVar2,
 	    "N_{s}/N_{m}(#Delta#"+fVar2+", #Delta#"+fVar1+");#Delta#"+fVar2+";#Delta#"+fVar1,
-	    nbinsx,-nedgex,nedgex,
-	    nbinsy,-nedgey,nedgey);
+	    fNbinsx,fBinMinX,fBinMaxX,
+	    fNbinsy,fBinMinY,fBinMaxY);
   float ratio;
   float settle_at = 1.0;
-  for ( int x = 1; x < nbinsx+1; x++ ) {
-    for ( int y = 1; y < nbinsy+1; y++ ) {
+  for ( int x = 1; x < fNbinsx+1; x++ ) {
+    for ( int y = 1; y < fNbinsy+1; y++ ) {
       float nsvalue = fSameEvent2D.GetBinContent(x,y);
       float nmvalue = fMultiEvent2D.GetBinContent(x,y);
       if ( nsvalue < 500.0 || nmvalue < 500.0 ) {
@@ -83,4 +88,16 @@ void TCorrelation::FillCorrelation()
     }
   }
   fCorrelation2D = ndiv;
+}
+
+
+void TCorrelation::SetBins2D(Float_t nbinsx, Float_t binminx, Float_t binmaxx,
+			     Float_t nbinsy, Float_t binminy, Float_t binmaxy)
+{
+  fNbinsx = nbinsx;
+  fNbinsy = nbinsy;
+  fBinMaxX = binmaxx;
+  fBinMinX = binminx;
+  fBinMaxY = binmaxy;
+  fBinMinY = binminy;
 }

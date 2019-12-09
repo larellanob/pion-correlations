@@ -17,10 +17,10 @@ bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
 bool gExport_pdf  = false;
 bool gExport_png  = true;
-Float_t gDataCap  = 0.01; // percentage of data to be used in analysis
+Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
 TDatabasePDG db;
 
-Float_t PhiPQ(TVector3, TLorentzVector);
+//Float_t PhiPQ(TVector3, TLorentzVector);
 void export_hist(TH2 *, TString, TString options = "colz");
 void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier = "" );
 void full_ridge_plots(TCorrelation* );
@@ -64,6 +64,11 @@ void ridge()
   TTreeReaderArray<Float_t> py(th,"Py");
   TTreeReaderArray<Float_t> pz(th,"Pz");
 
+  TTreeReaderArray<Float_t> Theta(th,"Theta");
+  TTreeReaderArray<Float_t> Phi(th,"Phi");
+  TTreeReaderArray<Float_t> ThetaPQ(th,"ThetaPQ");
+  TTreeReaderArray<Float_t> PhiPQ(th,"PhiPQ");
+  
   TTreeReaderValue<Float_t> epx(e,"Pex");
   TTreeReaderValue<Float_t> epy(e,"Pey");
   TTreeReaderValue<Float_t> epz(e,"Pez");
@@ -79,8 +84,11 @@ void ridge()
   std::vector<int> neg_pions;
   std::vector<TLorentzVector> Particles;
 
-  std::vector<TVector3> old_piplus;
-  std::vector<TVector3> old_piminus;
+  //std::vector<TVector3> old_piplus;
+  //std::vector<TVector3> old_piminus;
+  std::vector<std::vector<Float_t>> old_piplus;
+  std::vector<std::vector<Float_t>> old_piminus;
+  
   
   UInt_t events = 0;
   int counter=0;
@@ -159,44 +167,30 @@ void ridge()
     // variable old_plus defines wheter the old pions + or - are used
     
     // OLD PI MINUS
+    
     if ( old_piminus.size() != 0 && !old_plus && events > 1 ) {
       bool do_negativee = true;
+      
       for ( auto i: pos_pions ) {
-	TVector3 piplus (px[i],py[i],pz[i]);
-	Float_t phiplus      = piplus.Phi();
-	Float_t thetaplus    = piplus.Theta();
-	
-	TVector3 gammav_rot  = virtual_photon.Vect();
-	Float_t thetaPQplus  = gammav_rot.Angle(piplus);
-	Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
-	//Float_t etaplus      = piplus.Eta(); // just implement theta for now
-	//angle2->Fill(abs(piplus.Phi()-gammav_rot.Phi()));
-	//cout << "------------------------------------" << endl;
+	Float_t PhiDiff = 0;
+	Float_t ThetaDiff = 0;
 	for ( auto piminus: old_piminus ) {
-	  Float_t phiminus     = piminus.Phi();
-	  Float_t thetaminus   = piminus.Theta();
+	  PhiDiff = abs(Phi[i]-piminus[0]);
+	  if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
+	  ThetaDiff = (Theta[i]-piminus[1]);
+	  //if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
+	  corr_ang->FillMulti(ThetaDiff, PhiDiff);
 
-	  TVector3 gammav_rot  = oldgamma.Vect();
-	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
-	  Float_t phiPQminus    = PhiPQ(piminus,oldgamma);
-	  corr_ang->FillMulti(thetaplus-thetaminus,phiplus-phiminus);
-	  corr_apq->FillMulti(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
-	  if ( do_negativee ) {
-	    //angle1->Fill(abs(piminus.Phi()-gammav_rot.Phi()));
-	    /*
-	    cout << "-----" << endl;
-	    cout << "gamma, piminus, phipqminus: " << endl;;
-	    gammav_rot.Print();
-	    piminus.Print();
-	    cout << phiPQminus << " " << thetaPQminus << endl;
-	    */
-	  }
+	  PhiDiff = abs(PhiPQ[i]-piminus[2]);
+	  if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
+	  ThetaDiff = (ThetaPQ[i]-piminus[3]);
+	  //if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
+	  corr_apq->FillMulti(ThetaDiff, PhiDiff);
 	}
-	do_negativee = false;
       }
     }
     
-    
+    /*
     // OLD PI PLUS
     if ( old_piplus.size() != 0 && old_plus && events > 1 ) {
       for ( auto piplus: old_piplus ) {
@@ -220,10 +214,6 @@ void ridge()
 	}
       }
     }
-    /*
-    pippim_ppp->Fill(old_piplus.size(),neg_pions.size());
-    pippim_ppm->Fill(pos_pions.size(),old_piminus.size());
-    pippim->Fill(pos_pions.size(),neg_pions.size());
     */
     old_piplus.clear();
     old_piminus.clear();
@@ -236,49 +226,46 @@ void ridge()
 
     if ( m_debug )
       cout << "DEBUG: entering loop of pos_pions" << endl;
-    for ( auto i: pos_pions ) {
-      TVector3 piplus (px[i],py[i],pz[i]);
-      Float_t phiplus      = piplus.Phi();
-      Float_t thetaplus    = piplus.Theta();
-      Float_t etaplus      = piplus.Eta();
-      if ( m_debug )
-	cout << "DEBUG: Attempting to fill some histograms" << endl;
-      corr_ang->FillReco(phiplus,thetaplus);
-      corr_ang->FillRecoPlus(phiplus,thetaplus);
-      corr_eta->FillReco(phiplus,etaplus);
-      if ( m_debug )
-	cout << "DEBUG: Successfully filled some histograms" << endl;
-      old_piplus.push_back(piplus);
-      
-      TVector3 gammav_rot  = virtual_photon.Vect();
-      Float_t thetaPQplus  = gammav_rot.Angle(piplus);
-      Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
-      corr_apq->FillReco(phiPQplus,thetaPQplus);
-      
-      if ( m_debug )
-	cout << "DEBUG: what seems to be the problem?" << endl;
-      for ( auto j: neg_pions ) {
-	TVector3 piminus (px[j],py[j],pz[j]);
-	Float_t phiminus     = piminus.Phi();
-	Float_t thetaminus   = piminus.Theta();
-	Float_t etaminus     = piminus.Eta();
-	
-	TVector3 gammav_rot   = virtual_photon.Vect();
-	Float_t thetaPQminus  = gammav_rot.Angle(piminus);
-	Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
 
-	corr_ang->FillSame(thetaplus-thetaminus,phiplus-phiminus);
-	corr_eta->FillSame(etaplus-etaminus,phiplus-phiminus);
-	corr_apq->FillSame(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
-	if ( fill_neg ) { // fill "acceptance" histograms once only
+    for ( auto i: pos_pions ) {
+      Float_t PhiDiff = 0;
+      Float_t ThetaDiff = 0;
+      corr_ang->FillReco(Phi[i],Theta[i]);
+      corr_apq->FillReco(PhiPQ[i],ThetaPQ[i]);
+      corr_ang->FillRecoPlus(Phi[i],Theta[i]);
+      corr_apq->FillRecoPlus(PhiPQ[i],ThetaPQ[i]);
+      for ( auto j: neg_pions ) {
+	PhiDiff = 0;
+	ThetaDiff = 0;
+	PhiDiff = abs(Phi[i]-Phi[j]);
+	if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
+	ThetaDiff = (Theta[i]-Theta[j]);
+	//if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
+	corr_ang->FillSame(ThetaDiff, PhiDiff);
+	PhiDiff = 0;
+	ThetaDiff = 0;
+	PhiDiff = abs(PhiPQ[i]-PhiPQ[j]);
+	if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
+	ThetaDiff = (ThetaPQ[i]-ThetaPQ[j]);
+	//if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
+	corr_apq->FillSame(ThetaDiff, PhiDiff);
+	if ( fill_neg ) {
+	  std::vector<Float_t> piminus;
+	  piminus.push_back(Phi[j]);
+	  piminus.push_back(Theta[j]);
+	  piminus.push_back(PhiPQ[j]);
+	  piminus.push_back(ThetaPQ[j]);
 	  old_piminus.push_back(piminus);
-	  corr_ang->FillReco(phiminus,thetaminus);
-	  corr_apq->FillReco(phiPQminus,thetaPQminus);
-	  corr_eta->FillReco(phiminus,etaminus);
+	  corr_ang->FillReco(Phi[j],Theta[j]);
+	  corr_apq->FillReco(PhiPQ[j],ThetaPQ[j]);
+	  corr_ang->FillRecoMinus(Phi[j],Theta[j]);
+	  corr_apq->FillRecoMinus(PhiPQ[j],ThetaPQ[j]);
+	  //corr_eta->FillRecoMinus(phiminus,etaminus);
 	}
       }
-      fill_neg = false;
     }
+
+    
   }
 
   cout << "ran through this many events: " << events << endl;
@@ -308,7 +295,7 @@ void ridge()
 ////////////////////////
 //// FUNCTIONS
 ////////////////////////
-
+/*
 Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
 {
   TVector3 Vhelp(0.,0.,1.0);
@@ -346,7 +333,7 @@ Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
   }
   return pion.Phi();
 }
-
+*/
 
 void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
   auto c1 = new TCanvas();
