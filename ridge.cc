@@ -9,6 +9,7 @@
 #include "TCanvas.h"
 #include "TView.h"
 #include "TStyle.h"
+#include "TCorrelation.cxx"
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug      = false;
@@ -16,21 +17,16 @@ bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
 bool gExport_pdf  = false;
 bool gExport_png  = true;
+Float_t gDataCap  = 0.01; // percentage of data to be used in analysis
 TDatabasePDG db;
 
 Float_t PhiPQ(TVector3, TLorentzVector);
 void export_hist(TH2 *, TString, TString options = "colz");
-void ridge_plot(TH2 *, TString);
+void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier = "" );
+void full_ridge_plots(TCorrelation* );
 void side_by_side(TH2 *,TH2 *, TString);
 void initialize_histograms(int nsbinsx, int nsbinsy, double nsedgex, double nsedgey);
 
-// Histograms that will be accompanying us tonight:
-TH2 * ns, * ns_eta, * ns_pqf;
-TH2 * reco, * reco_plus, * reco_minus, * reco_PQ, * reco_eta;
-TH2 * nm, *nm_pqf;
-// if you need more, add them to function 'initialize_histograms' at
-// the bottom
-  
 
 // MAIN
 void ridge()
@@ -47,20 +43,23 @@ void ridge()
     f = new TFile("/home/luciano/Physics/CLAS/data/tree_output.root");
     kEbeam = 11.0;
   } else {
-    f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
+    //f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
+    f = new TFile("/home/luciano/Physics/CLAS/data/full_C_files.root");
     kEbeam = 5.014;
   }
   const Double_t kMpi   = 0.13957;
   const Double_t kMprt  = 0.938272;
   float rhomass = db.GetParticle(113)->Mass();
-
-
+  TTree *auxtree = (TTree*) f->GetKey("tree_data")->ReadObj();
+  Int_t Entries = 0;
+  Entries = auxtree->GetEntries();
+  
   // tree reader for thrown particles and scattered electron
   TTreeReader th("tree_data",f);
   TTreeReader e("e_rec",f);
     
-  TTreeReaderArray<Float_t> pid(th,"pid");
-  TTreeReaderArray<Float_t> q2(th,"Q2");
+  TTreeReaderArray<Int_t> pid(th,"pid");
+  TTreeReaderValue<Float_t> q2(th,"Q2");
   TTreeReaderArray<Float_t> px(th,"Px");
   TTreeReaderArray<Float_t> py(th,"Py");
   TTreeReaderArray<Float_t> pz(th,"Pz");
@@ -92,25 +91,18 @@ void ridge()
   int nsbinsy = nsbinsx*2.5;
   double nsedgex = TMath::Pi()*1.0;
   double nsedgey = TMath::Pi()*2.5;
-  
-  initialize_histograms(nsbinsx, nsbinsy, nsedgex, nsedgey);
-
-  TH2 * pippim = new TH2F("pippim",
-			  "#pi^{+}#pi^{-} same event;N_{#pi^{+}};N_{#pi^{-}}",
-			  8,-0.5,7.5,8,-0.5,7.5);
-  TH2 * pippim_ppp = new TH2F("pippim_ppp",
-			      "#pi^{+}#pi^{-} past #pi^{+};N_{#pi^{+}};N_{#pi^{-}}",
-			      8,-0.5,7.5,8,-0.5,7.5);
-  TH2 * pippim_ppm = new TH2F("pippim_ppm",
-			      "#pi^{+}#pi^{-} past #pi^{-};N_{#pi^{+}};N_{#pi^{-}}",
-			      8,-0.5,7.5,8,-0.5,7.5);
-  
+    
   if ( m_debug )
     cout << "DEBUG: entering main tree reading loop" << endl;
   // main file/tree reading loop
   TLorentzVector virtual_photon;
   TLorentzVector oldgamma;
-  while ( th.Next() ) {
+
+  TCorrelation * corr_ang = new TCorrelation("phi","theta");
+  TCorrelation * corr_apq = new TCorrelation("phi_{PQ}","theta_{PQ}");
+  TCorrelation * corr_eta = new TCorrelation("eta","theta");
+  
+  while ( th.Next()  && events < (gDataCap * Entries) ) {
     e.Next();
     events++;
     
@@ -122,11 +114,12 @@ void ridge()
 
 
     // virtual photon frame is per event
-    oldgamma = virtual_photon; // true old gamma
+    //oldgamma = virtual_photon; // true old gamma
 
     virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
-    //oldgamma = virtual_photon; // actually the same old gamma
+    oldgamma = virtual_photon; // actually the same old gamma
     
+       
     if ( events % 1000000 == 0 )
       cout << events << " events" << endl;
 
@@ -156,6 +149,8 @@ void ridge()
 
     if ( m_debug )
       cout << "DEBUG: Entering mutli event filling" << endl;
+
+
     // MULTI EVENT FILLING
 
     // note: pos_pions and neg_pions store the integer index of the
@@ -165,6 +160,7 @@ void ridge()
     
     // OLD PI MINUS
     if ( old_piminus.size() != 0 && !old_plus && events > 1 ) {
+      bool do_negativee = true;
       for ( auto i: pos_pions ) {
 	TVector3 piplus (px[i],py[i],pz[i]);
 	Float_t phiplus      = piplus.Phi();
@@ -174,6 +170,8 @@ void ridge()
 	Float_t thetaPQplus  = gammav_rot.Angle(piplus);
 	Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
 	//Float_t etaplus      = piplus.Eta(); // just implement theta for now
+	//angle2->Fill(abs(piplus.Phi()-gammav_rot.Phi()));
+	//cout << "------------------------------------" << endl;
 	for ( auto piminus: old_piminus ) {
 	  Float_t phiminus     = piminus.Phi();
 	  Float_t thetaminus   = piminus.Theta();
@@ -181,12 +179,23 @@ void ridge()
 	  TVector3 gammav_rot  = oldgamma.Vect();
 	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
 	  Float_t phiPQminus    = PhiPQ(piminus,oldgamma);
-	  nm->Fill(thetaplus-thetaminus,phiplus-phiminus);
-	  nm_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	  corr_ang->FillMulti(thetaplus-thetaminus,phiplus-phiminus);
+	  corr_apq->FillMulti(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	  if ( do_negativee ) {
+	    //angle1->Fill(abs(piminus.Phi()-gammav_rot.Phi()));
+	    /*
+	    cout << "-----" << endl;
+	    cout << "gamma, piminus, phipqminus: " << endl;;
+	    gammav_rot.Print();
+	    piminus.Print();
+	    cout << phiPQminus << " " << thetaPQminus << endl;
+	    */
+	  }
 	}
+	do_negativee = false;
       }
     }
-
+    
     
     // OLD PI PLUS
     if ( old_piplus.size() != 0 && old_plus && events > 1 ) {
@@ -206,18 +215,19 @@ void ridge()
 	  TVector3 gammav_rot  = virtual_photon.Vect();
 	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
 	  Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
-	  nm->Fill(thetaplus-thetaminus,phiplus-phiminus); 
-	  nm_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	  corr_ang->FillMulti(thetaplus-thetaminus,phiplus-phiminus);
+	  corr_apq->FillMulti(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
 	}
       }
     }
-    
+    /*
     pippim_ppp->Fill(old_piplus.size(),neg_pions.size());
     pippim_ppm->Fill(pos_pions.size(),old_piminus.size());
     pippim->Fill(pos_pions.size(),neg_pions.size());
+    */
     old_piplus.clear();
     old_piminus.clear();
-
+    
 
     if ( m_debug )
       cout << "DEBUG: Entering same event filling" << endl;
@@ -233,17 +243,17 @@ void ridge()
       Float_t etaplus      = piplus.Eta();
       if ( m_debug )
 	cout << "DEBUG: Attempting to fill some histograms" << endl;
-      reco->Fill(phiplus,thetaplus);
-      reco_plus->Fill(phiplus,thetaplus);
-      reco_eta->Fill(phiplus,etaplus);
+      corr_ang->FillReco(phiplus,thetaplus);
+      corr_ang->FillRecoPlus(phiplus,thetaplus);
+      corr_eta->FillReco(phiplus,etaplus);
       if ( m_debug )
 	cout << "DEBUG: Successfully filled some histograms" << endl;
       old_piplus.push_back(piplus);
-
+      
       TVector3 gammav_rot  = virtual_photon.Vect();
       Float_t thetaPQplus  = gammav_rot.Angle(piplus);
       Float_t phiPQplus    = PhiPQ(piplus,virtual_photon);
-      reco_PQ->Fill(phiPQplus,thetaPQplus);
+      corr_apq->FillReco(phiPQplus,thetaPQplus);
       
       if ( m_debug )
 	cout << "DEBUG: what seems to be the problem?" << endl;
@@ -257,15 +267,14 @@ void ridge()
 	Float_t thetaPQminus  = gammav_rot.Angle(piminus);
 	Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
 
-	ns->Fill(thetaplus-thetaminus,phiplus-phiminus);
-	ns_eta->Fill(etaplus-etaminus,phiplus-phiminus);
-	ns_pqf->Fill(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
+	corr_ang->FillSame(thetaplus-thetaminus,phiplus-phiminus);
+	corr_eta->FillSame(etaplus-etaminus,phiplus-phiminus);
+	corr_apq->FillSame(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
 	if ( fill_neg ) { // fill "acceptance" histograms once only
 	  old_piminus.push_back(piminus);
-	  reco->Fill(phiminus,thetaminus);
-	  reco_minus->Fill(phiminus,thetaminus);
-	  reco_eta->Fill(phiminus,etaminus);
-	  reco_PQ->Fill(phiPQminus,thetaPQminus);
+	  corr_ang->FillReco(phiminus,thetaminus);
+	  corr_apq->FillReco(phiPQminus,thetaPQminus);
+	  corr_eta->FillReco(phiminus,etaminus);
 	}
       }
       fill_neg = false;
@@ -284,94 +293,14 @@ void ridge()
     multi_method = "_pastPiMinus";
 
   
-  if ( gExport_pdf ) {
-    ridge_plot(ns,"single_ridge_theta.pdf");
-    ridge_plot(ns_eta,"single_ridge_eta.pdf");
-    ridge_plot(ns_pqf,"single_ridge_PQ.pdf");
-    ridge_plot(nm,"single_ridge_theta_MULTI"+multi_method+".pdf");
-    ridge_plot(nm_pqf,"single_ridge_theta_MULTI_PQ"+multi_method+".pdf");
-  }
+  corr_ang->FillCorrelation();
+  corr_apq->FillCorrelation();
 
-  if ( gExport_png ) {
-    ridge_plot(ns,"single_ridge_theta.png");
-    ridge_plot(ns_eta,"single_ridge_eta.png");
-    ridge_plot(ns_pqf,"single_ridge_PQ.png");
-    ridge_plot(nm,"single_ridge_theta_MULTI"+multi_method+".png");
-    ridge_plot(nm_pqf,"single_ridge_theta_MULTI_PQ"+multi_method+".png");
-    
-    export_hist(reco,out_path+"reco_theta.png");
-    export_hist(reco_eta,out_path+"reco_eta.png");
-    export_hist(reco_PQ,out_path+"reco_PQ.png");
-    
-    export_hist(reco_plus,out_path+"reco_theta_plus.png");
-    export_hist(reco_minus,out_path+"reco_theta_minus.png");
+  full_ridge_plots(corr_ang);
+  full_ridge_plots(corr_apq);
+  //full_ridge_plots(corr_eta);
+  
 
-    export_hist(pippim,out_path+"pions_SameEvent.png","colztext");
-    export_hist(pippim_ppp,out_path+"pions_PastPiP.png","colztext");
-    export_hist(pippim_ppm,out_path+"pions_PastPiM.png","colztext");
-  }
-
-  TH2 * ndiv = new TH2F("Correlations, lab frame (theta)",
-			"N_{s}/N_{m}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
-			nsbinsx,-nsedgex,nsedgex,
-			nsbinsy,-nsedgey,nsedgey);
-
-  TH2 * ndiv_pqf = new TH2F("Correlations, PQ frame (theta)",
-			"N_{s}/N_{m}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
-			nsbinsx,-nsedgex,nsedgex,
-			nsbinsy,-nsedgey,nsedgey);
-
-  float ratio;
-  float settle_at = 1.0;
-  for ( int x = 1; x < nsbinsx+1; x++ ) {
-    for ( int y = 1; y < nsbinsy+1; y++ ) {
-      float nsvalue = ns->GetBinContent(x,y);
-      float nmvalue = nm->GetBinContent(x,y);
-      float nsvalue_pqf = ns_pqf->GetBinContent(x,y);
-      float nmvalue_pqf = nm_pqf->GetBinContent(x,y);
-
-      if ( nsvalue < 500.0 || nmvalue < 500.0 ) {
-	ndiv->SetBinContent(x,y,settle_at);	
-      } else {
-	ndiv->SetBinContent(x,y,nsvalue/nmvalue);
-      }
-
-      if ( nsvalue_pqf < 500.0 || nmvalue_pqf < 500.0 ) {
-	ndiv_pqf->SetBinContent(x,y,settle_at);
-      } else {
-	ndiv_pqf->SetBinContent(x,y,nsvalue_pqf/nmvalue_pqf);
-      }
-
-      /*
-      if ( nm->GetBinContent(x,y) != 0 ) {
-	ratio = (ns->GetBinContent(x,y))/(nm->GetBinContent(x,y));
-	ndiv->GetBin(x,y);
-	
-	if ( ratio > 1.8 || ratio < 0.2) {
-	  cout << ns->GetBinContent(x,y) << " / "
-	       << nm->GetBinContent(x,y) << " = "
-	       << ratio << endl;
-	  ndiv->SetBinContent(x,y,settle_at);
-	  continue;
-	}
-	ndiv->SetBinContent(x,y,ratio);
-
-	
-      } else {
-	ndiv->SetBinContent(x,y,settle_at);
-      }
-      */
-    }
-  }
-
-  if ( gExport_pdf ) {
-    ridge_plot(ndiv,"single_ridge_theta_NDIV"+multi_method+".pdf");
-    ridge_plot(ndiv_pqf,"single_ridge_theta_NDIV_PQ"+multi_method+".pdf");
-  }
-  if ( gExport_png) {
-    ridge_plot(ndiv,"single_ridge_theta_NDIV"+multi_method+".png");
-    ridge_plot(ndiv_pqf,"single_ridge_theta_NDIV_PQ"+multi_method+".png");
-  }
   cout << "finished correctly" << endl;
 } // END MAIN
 
@@ -384,12 +313,37 @@ Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
 {
   TVector3 Vhelp(0.,0.,1.0);
   TVector3 gamma = gamma_vir.Vect();
+  if ( m_debug ) {
+    cout << "0 gamm: ";
+    gamma.Print();
+    cout << "0 pion: ";
+    pion.Print();
+    cout << "0 betw: ";
+    cout << gamma.Angle(pion) << endl;
+  }
   Double_t phi_z = TMath::Pi()-gamma.Phi();
   pion.RotateZ(phi_z);
   gamma.RotateZ(phi_z);
+  if ( m_debug ) {
+    cout << "1 gamm: ";
+    gamma.Print();
+    cout << "1 pion: ";
+    pion.Print();
+    cout << "1 betw: ";
+    cout << gamma.Angle(pion) << endl;
+  }
+  
   Double_t phi_y = gamma.Angle(Vhelp);
   pion.RotateY(phi_y);
-  //gamma.RotateY(phi_y);
+  if ( m_debug ) {
+    gamma.RotateY(phi_y);
+    cout << "2 gamm: ";
+    gamma.Print();
+    cout << "2 pion: ";
+    pion.Print();
+    cout << "2 betw: ";
+    cout << gamma.Angle(pion) << endl;
+  }
   return pion.Phi();
 }
 
@@ -404,43 +358,44 @@ void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
   delete c1;
 }
 
-void ridge_plot(TH2 *h2, TString out_name)
+
+void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier)
 {
   TCanvas *c1 = new TCanvas("c1","mi cambas",1000,1000);
   c1->SetLeftMargin(0.14);
-  h2->Draw("surf1");
-  
+  h2.Draw("surf1");
+
   // aesthetics
   //gStyle->SetOptStat(0);
   double theta = -30;
   double phi   = 60;
-  h2->GetXaxis()->CenterTitle(true);
-  h2->GetXaxis()->SetTitleOffset(1.5);
-  h2->GetYaxis()->CenterTitle(true);
+  h2.GetXaxis()->CenterTitle(true);
+  h2.GetXaxis()->SetTitleOffset(1.5);
+  h2.GetYaxis()->CenterTitle(true);
 
   // main 2d plot 
-  TString out_filename = out_path+out_name;
+  TString out_filename = out_path+out_path_modifier+out_name;
   c1->SaveAs(out_filename);
 
   // mountain side plots
   gPad->GetView()->RotateView(0,90);
-  out_filename = out_path+"mountainsideY_"+out_name;
+  out_filename = out_path+out_path_modifier+"hillsideY_"+out_name;
   c1->SaveAs(out_filename);
   gPad->GetView()->RotateView(-90,90);
-  out_filename = out_path+"mountainsideX_"+out_name;
+  out_filename = out_path+out_path_modifier+"hillsideX_"+out_name;
   c1->SaveAs(out_filename);
 
   // projection plots
-  TH1 * projx = h2->ProjectionX();
+  TH1 * projx = h2.ProjectionX();
   projx->SetFillColor(kBlue);
   projx->Draw();
-  out_filename = out_path+"projx_"+out_name;
+  out_filename = out_path+out_path_modifier+"projx_"+out_name;
   c1->SaveAs(out_filename);
   
-  TH1 * projy = h2->ProjectionY();
+  TH1 * projy = h2.ProjectionY();
   projy->SetFillColor(kBlue);
   projy->Draw();
-  out_filename = out_path+"projy_"+out_name;
+  out_filename = out_path+out_path_modifier+"projy_"+out_name;
   c1->SaveAs(out_filename);
 
   // comment next lines if not running on batch mode I guess
@@ -482,55 +437,12 @@ void side_by_side(TH2 *hlab,TH2 *hvir, TString out_filename)
   delete c1;
 }
 
-void initialize_histograms(int nsbinsx, int nsbinsy, double nsedgex, double nsedgey)
+
+void full_ridge_plots(TCorrelation * corr)
 {
-  ns = new TH2F("Signal Distribution, lab frame (theta)",
-		"N_{s}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
-		nsbinsx,-nsedgex,nsedgex,
-		nsbinsy,-nsedgey,nsedgey);
-  
-  ns_eta = new TH2F("Signal Distribution, lab frame",
-		    "N_{s}(#Delta#eta, #Delta#phi);#Delta#eta;#Delta#phi",
-		    nsbinsx,-nsedgex,nsedgex,
-		    nsbinsy,-nsedgey,nsedgey);
-  
-  ns_pqf = new TH2F("Signal Distribution, PQ frame",
-		    "N_{s}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
-		    nsbinsx,-nsedgex,nsedgex,
-		    nsbinsy,-nsedgey,nsedgey);
-  
-  reco = new TH2F("Reconstructed angles",
-		  "Reconstructed #pi^{#pm};#phi;#theta",
-		  72,-TMath::Pi(),TMath::Pi(),
-		  36,0.0,TMath::Pi());
-  
-  reco_plus = new TH2F("Reconstructed angles, #pi^{+}",
-		       "Reconstructed #pi^{+};#phi;#theta",
-		       72,-TMath::Pi(),TMath::Pi(),
-		       36,0.0,TMath::Pi());
-  
-  reco_minus = new TH2F("Reconstructed angles, #pi^{-}",
-			"Reconstructed #pi^{-};#phi;#theta",
-			72,-TMath::Pi(),TMath::Pi(),
-			36,0.0,TMath::Pi());
-  
-  
-  reco_PQ = new TH2F("Reconstructed angles, PQ frame",
-		     "Reconstructed #pi^{#pm};#phi_{PQ};#theta_{PQ}",
-		     72,-TMath::Pi(),TMath::Pi(),
-		     36,0.0,TMath::Pi());
-  
-  reco_eta = new TH2F("Reconstructed pions, eta",
-		      "Reconstructed #pi^{#pm};#phi;#eta",
-		      72,-TMath::Pi(),TMath::Pi(),
-		      80,-2.0,4.0);
-  
-  nm = new TH2F("Multi events, lab frame (theta)",
-		"N_{m}(#Delta#theta, #Delta#phi);#Delta#theta;#Delta#phi",
-		nsbinsx,-nsedgex,nsedgex,
-		nsbinsy,-nsedgey,nsedgey);
-  nm_pqf = new TH2F("Multi events, PQ frame (theta)",
-		    "N_{m}(#Delta#theta_{PQ}, #Delta#phi_{PQ});#Delta#theta_{PQ};#Delta#phi_{PQ}",
-		    nsbinsx,-nsedgex,nsedgex,
-		    nsbinsy,-nsedgey,nsedgey);  
+  TString connector = corr->GetVar(1)+"_"+corr->GetVar(2);
+  TString connector2 = connector+"/";
+  ridge_plot(corr->GetSE(),"ridge_same_"+connector+".png", connector2);
+  ridge_plot(corr->GetME(),"ridge_multi_"+connector+".png", connector2);
+  ridge_plot(corr->GetCO(),"ridge_correlation_"+connector+".png", connector2);
 }
