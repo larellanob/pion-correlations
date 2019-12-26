@@ -15,22 +15,24 @@ TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug      = false;
 bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
-bool gExport_pdf  = false;
-bool gExport_png  = true;
-Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
+Float_t gDataCap  = 0.4; // percentage of data to be used in analysis
 TDatabasePDG db;
+
 
 //Float_t PhiPQ(TVector3, TLorentzVector);
 void export_hist(TH2 *, TString, TString options = "colz");
 void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier = "" );
 void full_ridge_plots(TCorrelation* );
 void side_by_side(TH2 *,TH2 *, TString);
-void initialize_histograms(int nsbinsx, int nsbinsy, double nsedgex, double nsedgey);
-
+Float_t ComputeThetaPQ(TLorentzVector, TLorentzVector);
+Float_t ComputePhiPQ(TLorentzVector, TLorentzVector);
+TLorentzVector VirtualFrame(TLorentzVector, double, double, double);
+Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad);
 
 // MAIN
-void ridge()
+void ridge(TString target = "")
 {
+  //gStyle->SetOptStat(0);
   if ( m_simulation == true ) {
     out_path+="simulation/";
   } else {
@@ -44,12 +46,19 @@ void ridge()
     kEbeam = 11.0;
   } else {
     //f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
-    f = new TFile("/home/luciano/Physics/CLAS/data/full_C_files.root");
+    if ( target == "Pb" ) {
+      f = new TFile("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+    } else if ( target == "Fe" ) {
+      f = new TFile("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+    } else {
+      target = "C";
+      f = new TFile("/home/luciano/Physics/CLAS/data/full_C_files.root");
+    }
     kEbeam = 5.014;
   }
-  const Double_t kMpi   = 0.13957;
-  const Double_t kMprt  = 0.938272;
-  float rhomass = db.GetParticle(113)->Mass();
+  Double_t kChargedPionMass = db.GetParticle(211)->Mass();
+  Double_t kProtonMass = db.GetParticle(2212)->Mass();
+  Double_t kRhoMass = db.GetParticle(113)->Mass();
   TTree *auxtree = (TTree*) f->GetKey("tree_data")->ReadObj();
   Int_t Entries = 0;
   Entries = auxtree->GetEntries();
@@ -64,6 +73,9 @@ void ridge()
   TTreeReaderArray<Float_t> py(th,"Py");
   TTreeReaderArray<Float_t> pz(th,"Pz");
 
+  TTreeReaderValue<Int_t> TargType(th,"TargType");
+  TTreeReaderArray<Float_t> Zh(th,"Zh");
+
   TTreeReaderArray<Float_t> Theta(th,"Theta");
   TTreeReaderArray<Float_t> Phi(th,"Phi");
   TTreeReaderArray<Float_t> ThetaPQ(th,"ThetaPQ");
@@ -77,28 +89,25 @@ void ridge()
     
   cout << "working" << endl;
 
-  TH1 * h1 = new TH1F("h1",
-		      "Inv. mass of (#pi^{+} #pi^{-});M_{sum};counts",
-		      50, 0, 1.5);
   std::vector<int> pos_pions;
   std::vector<int> neg_pions;
-  std::vector<TLorentzVector> Particles;
 
-  //std::vector<TVector3> old_piplus;
-  //std::vector<TVector3> old_piminus;
-  std::vector<std::vector<Float_t>> old_piplus;
-  std::vector<std::vector<Float_t>> old_piminus;
+  std::vector<TLorentzVector> piplus4v;
+  std::vector<TLorentzVector> piminus4v;
+
+  std::vector<TLorentzVector> piplus4v_rotated;
+  std::vector<TLorentzVector> piminus4v_rotated;
+
+  std::vector<TLorentzVector> piplus4v_boosted;
+  std::vector<TLorentzVector> piminus4v_boosted;
+
+  std::vector<TLorentzVector> old4v;
+  std::vector<TLorentzVector> old4v_rotated;
+  std::vector<TLorentzVector> old4v_boosted;
   
   
   UInt_t events = 0;
   int counter=0;
-
-
-  // histograms
-  int nsbinsx = 32;
-  int nsbinsy = nsbinsx*2.5;
-  double nsedgex = TMath::Pi()*1.0;
-  double nsedgey = TMath::Pi()*2.5;
     
   if ( m_debug )
     cout << "DEBUG: entering main tree reading loop" << endl;
@@ -106,13 +115,17 @@ void ridge()
   TLorentzVector virtual_photon;
   TLorentzVector oldgamma;
 
-  TCorrelation * corr_ang = new TCorrelation("phi","theta");
-  TCorrelation * corr_apq = new TCorrelation("phi_{PQ}","theta_{PQ}");
-  TCorrelation * corr_eta = new TCorrelation("eta","theta");
-  
+  TCorrelation * corr_ang = new TCorrelation("phi","theta",target);
+  TCorrelation * corr_apq = new TCorrelation("phi_PQ","theta_PQ", target);
+  TCorrelation * corr_boo = new TCorrelation("phiPQboosted","thetaPQboosted",target);
+  //TCorrelation * corr_eta = new TCorrelation("eta","theta", target);
+  //TCorrelation * corr_vir = new TCorrelation("vphi","vtheta", target);
+
+  ULong_t NTriggers = 0;
   while ( th.Next()  && events < (gDataCap * Entries) ) {
     e.Next();
     events++;
+
     
     Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
     if ( scattered_energy < 0.005 )
@@ -120,24 +133,45 @@ void ridge()
     if ( scattered_energy > kEbeam  )
       cout << "WARNING: High e' energy = " <<  scattered_energy << endl;
 
-
     // virtual photon frame is per event
     //oldgamma = virtual_photon; // true old gamma
 
     virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
     oldgamma = virtual_photon; // actually the same old gamma
-    
-       
-    if ( events % 1000000 == 0 )
-      cout << events << " events" << endl;
 
+    if ( events % 1000000 == 0 ) {
+      cout << events << "/" << gDataCap*Entries << endl;
+    }
+    
+
+    //////////////////////////
+    // event cuts
     if ( *ew < 2.0 || *eq2 < 1.0 ) // DIS cut
       continue;
+    if ( *TargType == 1 ) // D == 1; heavy nuclei == 2
+      continue;
 
-    // Electron
-    
+    //////////////////////////
+    // pions in the event
     pos_pions.clear();
     neg_pions.clear();
+    
+    // pi+ pi+
+    /*
+      bool trigger = false;
+    for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+      if ( pid[i] == 211  && !trigger ) {
+	pos_pions.push_back(i);
+	trigger = true;
+	continue;
+      }
+      if ( pid[i] == 211 && trigger ) {
+	neg_pions.push_back(i);
+      }
+    }
+    */
+
+    // pi+ pi-
     for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
       if ( pid[i] == 211 ) {
 	pos_pions.push_back(i);
@@ -146,79 +180,134 @@ void ridge()
 	neg_pions.push_back(i);
       }
     }
-
-    /*
-    if ( pos_pions.size() != neg_pions.size() )
-      continue;
-    */
     
+    // make sure of this, normalization might depend on it
     if ( pos_pions.size() == 0  || neg_pions.size() == 0 )
       continue;
 
+
+
+    ///////////////////////////
+    // Pions 4vectors
+    piplus4v.clear();
+    piminus4v.clear();
+    piplus4v_rotated.clear();
+    piminus4v_rotated.clear();
+    piplus4v_boosted.clear();
+    piminus4v_boosted.clear();
+    
+    for ( int i = 0; i < pid.GetSize(); i++ ) {
+      if ( pid[i] == 211 ) {
+	Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
+	TLorentzVector pi (px[i],py[i],pz[i],e);
+	piplus4v.push_back(pi);
+      } else if ( pid[i] == -211 ) {
+	Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
+	TLorentzVector pi (px[i],py[i],pz[i],e);
+	piminus4v.push_back(pi);
+      }
+    }
+
+    //////////////////////////////
+    // VIRTUAL PHOTON FRAME
+    // event virtual photon frame
+    Double_t Egamma = virtual_photon.E();
+    Double_t angle1 = TMath::Pi() + atan2((*epy),(*epx));
+    virtual_photon.RotateZ(-angle1);
+
+    double numer = kEbeam-(*epz);
+    double denom = virtual_photon.P();
+    Double_t angle2;
+    if ( numer/denom < TMath::Pi() ){
+      angle2 = acos(numer/denom);
+    } else if ( numer/denom >= TMath::Pi() ){
+      angle2 = 2*TMath::Pi()*acos(numer/denom);
+    }
+    virtual_photon.RotateY(-angle2);
+    Double_t boost  = virtual_photon.P()/(Egamma+kProtonMass);
+    virtual_photon.Boost(0,0,-boost);
+
+    //////////////////////////////
+    // rotation and boost
+    for ( int i = 0; i < piplus4v.size(); i++ ) {
+      TLorentzVector aux_rotation;
+      aux_rotation = VirtualFrame(piplus4v[i],angle1,angle2,0);
+      piplus4v_rotated.push_back(aux_rotation);
+      TLorentzVector aux_boost;
+      aux_boost = VirtualFrame(piplus4v[i],angle1,angle2,-boost);
+      piplus4v_boosted.push_back(aux_boost);
+    }
+
+    for ( int i = 0; i < piminus4v.size(); i++ ) {
+      TLorentzVector aux_rotation;
+      aux_rotation = VirtualFrame(piminus4v[i],angle1,angle2,0);
+      piminus4v_rotated.push_back(aux_rotation);
+      TLorentzVector aux_boost;
+      aux_boost = VirtualFrame(piminus4v[i],angle1,angle2,-boost);
+      piminus4v_boosted.push_back(aux_boost);
+    }
+
+    if ( m_debug ) {
+      cout << "---------------------------------------------------------------" << endl;
+      cout << "pospions: " << pos_pions.size() << endl;
+      for ( int i = 0; i < pos_pions.size(); i++ ) {
+	cout << "pz: " << pz[pos_pions[i]] << endl;
+	cout << "theta: " << Theta[pos_pions[i]] << endl;
+	cout << "phi: " << Phi[pos_pions[i]] << endl;
+	cout << "thetapq: " << ThetaPQ[pos_pions[i]] << endl;
+	cout << "phipq: " << PhiPQ[pos_pions[i]] << endl;
+	cout << "-------------" << endl;
+      }
+      
+      cout << "4v: " << piplus4v.size() << endl;
+      for ( int i = 0; i < piplus4v.size(); i++ ) {
+	cout << "-----------------------------" << endl;
+	cout << "pz: " << piplus4v[i].Pz() << endl;
+	cout << "theta: " << piplus4v[i].Theta()*180./TMath::Pi() << endl;
+	cout << "phi: " << piplus4v[i].Phi()*180./TMath::Pi() << endl;
+	cout << "-------------" << endl;
+	cout << "pz rot: " << piplus4v_rotated[i].Pz() << endl;
+	cout << "theta rot: " << piplus4v_rotated[i].Theta()*180./TMath::Pi() << endl;
+	cout << "phi rot: " << piplus4v_rotated[i].Phi()*180./TMath::Pi() << endl;
+	cout << "-------------" << endl;
+	cout << "pz boo: " << piplus4v_boosted[i].Pz() << endl;
+	cout << "theta boo: " << piplus4v_boosted[i].Theta()*180./TMath::Pi() << endl;
+	cout << "phi boo: " << piplus4v_boosted[i].Phi()*180./TMath::Pi()<< endl;
+      }
+    }
+    
+    
     if ( m_debug )
       cout << "DEBUG: Entering mutli event filling" << endl;
 
 
-    // MULTI EVENT FILLING
+    ///////////////////////////
+    // multi event filling
+    if ( old4v.size() != 0 && !old_plus && events > 1 ) {
+      for ( int i = 0; i < piplus4v.size(); i++ ) {
+	for ( int j = 0; j < old4v.size(); j++ ) {
+	  Float_t x,y;
 
-    // note: pos_pions and neg_pions store the integer index of the
-    // pions position within the event, whereas old_piminus and
-    // old_piplus store the whole TVector3 pion data. The global
-    // variable old_plus defines wheter the old pions + or - are used
-    
-    // OLD PI MINUS
-    
-    if ( old_piminus.size() != 0 && !old_plus && events > 1 ) {
-      bool do_negativee = true;
-      
-      for ( auto i: pos_pions ) {
-	Float_t PhiDiff = 0;
-	Float_t ThetaDiff = 0;
-	for ( auto piminus: old_piminus ) {
-	  PhiDiff = abs(Phi[i]-piminus[0]);
-	  if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
-	  ThetaDiff = (Theta[i]-piminus[1]);
-	  //if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
-	  corr_ang->FillMulti(ThetaDiff, PhiDiff);
+	  x = DeltaAngleRad(piplus4v[i].Phi(),old4v[j].Phi());
+	  y = DeltaAngleRad(piplus4v[i].Theta(),old4v[j].Theta());
+	  corr_ang->FillMulti(x,y);
 
-	  PhiDiff = abs(PhiPQ[i]-piminus[2]);
-	  if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
-	  ThetaDiff = (ThetaPQ[i]-piminus[3]);
-	  //if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
-	  corr_apq->FillMulti(ThetaDiff, PhiDiff);
+	  x = DeltaAngleRad(piplus4v_rotated[i].Phi(),old4v_rotated[j].Phi());
+	  y = DeltaAngleRad(piplus4v_rotated[i].Theta(),old4v_rotated[j].Theta());
+	  corr_apq->FillMulti(x,y);
+	  
+	  x = DeltaAngleRad(piplus4v_boosted[i].Phi(),old4v_boosted[j].Phi());
+	  y = DeltaAngleRad(piplus4v_boosted[i].Theta(),old4v_boosted[j].Theta());
+	  corr_boo->FillMulti(x,y);
 	}
       }
     }
     
-    /*
-    // OLD PI PLUS
-    if ( old_piplus.size() != 0 && old_plus && events > 1 ) {
-      for ( auto piplus: old_piplus ) {
-	Float_t phiplus      = piplus.Phi();
-	Float_t thetaplus    = piplus.Theta();
-	
-	TVector3 gammav_rot  = oldgamma.Vect();
-	Float_t thetaPQplus  = gammav_rot.Angle(piplus);
-	Float_t phiPQplus    = PhiPQ(piplus,oldgamma);
-	//Float_t etaplus      = piplus.Eta(); // just implement theta for now
-	for ( auto i: neg_pions ) {
-	  TVector3 piminus (px[i],py[i],pz[i]);
-	  Float_t phiminus     = piminus.Phi();
-	  Float_t thetaminus   = piminus.Theta();
 
-	  TVector3 gammav_rot  = virtual_photon.Vect();
-	  Float_t thetaPQminus  = gammav_rot.Angle(piminus);
-	  Float_t phiPQminus    = PhiPQ(piminus,virtual_photon);
-	  corr_ang->FillMulti(thetaplus-thetaminus,phiplus-phiminus);
-	  corr_apq->FillMulti(thetaPQplus-thetaPQminus,phiPQplus-phiPQminus);
-	}
-      }
-    }
-    */
-    old_piplus.clear();
-    old_piminus.clear();
+    old4v.clear();
+    old4v_rotated.clear();
+    old4v_boosted.clear();
     
-
     if ( m_debug )
       cout << "DEBUG: Entering same event filling" << endl;
     // SAME EVENT FILLING
@@ -227,50 +316,66 @@ void ridge()
     if ( m_debug )
       cout << "DEBUG: entering loop of pos_pions" << endl;
 
-    for ( auto i: pos_pions ) {
-      Float_t PhiDiff = 0;
-      Float_t ThetaDiff = 0;
-      corr_ang->FillReco(Phi[i],Theta[i]);
-      corr_apq->FillReco(PhiPQ[i],ThetaPQ[i]);
-      corr_ang->FillRecoPlus(Phi[i],Theta[i]);
-      corr_apq->FillRecoPlus(PhiPQ[i],ThetaPQ[i]);
-      for ( auto j: neg_pions ) {
-	PhiDiff = 0;
-	ThetaDiff = 0;
-	PhiDiff = abs(Phi[i]-Phi[j]);
-	if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
-	ThetaDiff = (Theta[i]-Theta[j]);
-	//if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
-	corr_ang->FillSame(ThetaDiff, PhiDiff);
-	PhiDiff = 0;
-	ThetaDiff = 0;
-	PhiDiff = abs(PhiPQ[i]-PhiPQ[j]);
-	if ( PhiDiff > 180. ) PhiDiff = 360. - PhiDiff;
-	ThetaDiff = (ThetaPQ[i]-ThetaPQ[j]);
-	//if ( ThetaDiff > 180. ) ThetaDiff = 360. - ThetaDiff;
-	corr_apq->FillSame(ThetaDiff, PhiDiff);
+    ////////////////////////////////////
+    /// SAME EVENT FILLING
+
+    for ( int i = 0; i < piplus4v.size(); i++ ) {
+      corr_ang->FillReco(piplus4v[i].Phi()*180./TMath::Pi(), piplus4v[i].Theta()*180./TMath::Pi());
+      corr_apq->FillReco(piplus4v_rotated[i].Phi()*180./TMath::Pi(), piplus4v_rotated[i].Theta()*180./TMath::Pi() );
+      corr_boo->FillReco(piplus4v_boosted[i].Phi()*180./TMath::Pi(), piplus4v_boosted[i].Theta()*180./TMath::Pi() );
+
+      corr_ang->FillRecoPlus(piplus4v[i].Phi()*180./TMath::Pi(), piplus4v[i].Theta()*180./TMath::Pi());
+      corr_apq->FillRecoPlus(piplus4v_rotated[i].Phi()*180./TMath::Pi(), piplus4v_rotated[i].Theta()*180./TMath::Pi() );
+      corr_boo->FillRecoPlus(piplus4v_boosted[i].Phi()*180./TMath::Pi(), piplus4v_boosted[i].Theta()*180./TMath::Pi() );
+      for ( int j = 0; j < piminus4v.size(); j++ ) {
+	float x,y;
+
+	x = DeltaAngleRad(piplus4v[i].Phi(),piminus4v[j].Phi());
+	y = DeltaAngleRad(piplus4v[i].Theta(),piminus4v[j].Theta());
+	corr_ang->FillSame(x,y);
+
+	x = DeltaAngleRad(piplus4v_rotated[i].Phi(),piminus4v_rotated[j].Phi());
+	y = DeltaAngleRad(piplus4v_rotated[i].Theta(),piminus4v_rotated[j].Theta());	
+	corr_apq->FillSame(x,y);
+	
+	x = DeltaAngleRad(piplus4v_boosted[i].Phi(),piminus4v_boosted[j].Phi());
+	y = DeltaAngleRad(piplus4v_boosted[i].Theta(),piminus4v_boosted[j].Theta());
+	corr_boo->FillSame(x,y);
+
+	// enters this loop only once per event
 	if ( fill_neg ) {
-	  std::vector<Float_t> piminus;
-	  piminus.push_back(Phi[j]);
-	  piminus.push_back(Theta[j]);
-	  piminus.push_back(PhiPQ[j]);
-	  piminus.push_back(ThetaPQ[j]);
-	  old_piminus.push_back(piminus);
-	  corr_ang->FillReco(Phi[j],Theta[j]);
-	  corr_apq->FillReco(PhiPQ[j],ThetaPQ[j]);
-	  corr_ang->FillRecoMinus(Phi[j],Theta[j]);
-	  corr_apq->FillRecoMinus(PhiPQ[j],ThetaPQ[j]);
-	  //corr_eta->FillRecoMinus(phiminus,etaminus);
+	  corr_ang->FillReco(piplus4v[j].Phi()*180./TMath::Pi(), piplus4v[j].Theta()*180./TMath::Pi());
+	  corr_apq->FillReco(piplus4v_rotated[j].Phi()*180./TMath::Pi(), piplus4v_rotated[j].Theta()*180./TMath::Pi() );
+	  corr_boo->FillReco(piplus4v_boosted[j].Phi()*180./TMath::Pi(), piplus4v_boosted[j].Theta()*180./TMath::Pi() );
+
+	  corr_ang->FillRecoMinus(piplus4v[j].Phi()*180./TMath::Pi(), piplus4v[j].Theta()*180./TMath::Pi());
+	  corr_apq->FillRecoMinus(piplus4v_rotated[j].Phi()*180./TMath::Pi(), piplus4v_rotated[j].Theta()*180./TMath::Pi() );
+	  corr_boo->FillRecoMinus(piplus4v_boosted[j].Phi()*180./TMath::Pi(), piplus4v_boosted[j].Theta()*180./TMath::Pi() );
 	}
       }
+      fill_neg = false;
     }
 
+    //////////////////////////////////////
+    // old pion saving
+
+    // old negative pion:
+    for ( int j = 0; j < piminus4v.size(); j++ ) {
+      old4v.push_back(piminus4v[j]);
+      old4v_rotated.push_back(piminus4v_rotated[j]);
+      old4v_boosted.push_back(piminus4v_boosted[j]);
+    }
     
+
+    NTriggers += pos_pions.size();
+    //    if ( pos_pions.size() < 1 )
+    //cout << "what " << pos_pions.size() << endl;
+    counter++;
   }
 
   cout << "ran through this many events: " << events << endl;
   cout << "processed this many events: " << counter << endl;
-  
+  cout << "number of trigger particles: " << NTriggers << endl;
   //side_by_side(ns,ns_vir,"NS_lab_virtual.png");
 
   TString multi_method;
@@ -279,12 +384,16 @@ void ridge()
   else if ( !old_plus )
     multi_method = "_pastPiMinus";
 
+  //corr_apq->NormalizeSame(NTriggers);
+  //corr_apq->NormalizeMulti();
   
   corr_ang->FillCorrelation();
   corr_apq->FillCorrelation();
-
+  corr_boo->FillCorrelation();
+  
   full_ridge_plots(corr_ang);
   full_ridge_plots(corr_apq);
+  full_ridge_plots(corr_boo);
   //full_ridge_plots(corr_eta);
   
 
@@ -295,45 +404,19 @@ void ridge()
 ////////////////////////
 //// FUNCTIONS
 ////////////////////////
-/*
-Float_t PhiPQ(TVector3 pion, TLorentzVector gamma_vir )
+
+Float_t ComputePhiPQ(TLorentzVector pion, TLorentzVector gamma_vir )
 {
   TVector3 Vhelp(0.,0.,1.0);
-  TVector3 gamma = gamma_vir.Vect();
-  if ( m_debug ) {
-    cout << "0 gamm: ";
-    gamma.Print();
-    cout << "0 pion: ";
-    pion.Print();
-    cout << "0 betw: ";
-    cout << gamma.Angle(pion) << endl;
-  }
+  TLorentzVector gamma = gamma_vir;
   Double_t phi_z = TMath::Pi()-gamma.Phi();
   pion.RotateZ(phi_z);
-  gamma.RotateZ(phi_z);
-  if ( m_debug ) {
-    cout << "1 gamm: ";
-    gamma.Print();
-    cout << "1 pion: ";
-    pion.Print();
-    cout << "1 betw: ";
-    cout << gamma.Angle(pion) << endl;
-  }
-  
+  gamma.RotateZ(phi_z);  
   Double_t phi_y = gamma.Angle(Vhelp);
   pion.RotateY(phi_y);
-  if ( m_debug ) {
-    gamma.RotateY(phi_y);
-    cout << "2 gamm: ";
-    gamma.Print();
-    cout << "2 pion: ";
-    pion.Print();
-    cout << "2 betw: ";
-    cout << gamma.Angle(pion) << endl;
-  }
-  return pion.Phi();
+  return ( (pion.Phi()*180.)/TMath::Pi() );
 }
-*/
+
 
 void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
   auto c1 = new TCanvas();
@@ -432,4 +515,39 @@ void full_ridge_plots(TCorrelation * corr)
   ridge_plot(corr->GetSE(),"ridge_same_"+connector+".png", connector2);
   ridge_plot(corr->GetME(),"ridge_multi_"+connector+".png", connector2);
   ridge_plot(corr->GetCO(),"ridge_correlation_"+connector+".png", connector2);
+}
+
+TLorentzVector VirtualFrame(TLorentzVector v1,
+			    double angle1, double angle2, double boost)
+{
+  TLorentzVector *v2;
+  v2 = &v1;
+  v2->RotateZ(-angle1);
+  v2->RotateY(-angle2);
+  v2->Boost(0,0,-boost);
+  return *v2;
+}
+
+Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad)
+{
+  Float_t x = x_rad*180./TMath::Pi();
+  Float_t y = y_rad*180./TMath::Pi();
+
+  Float_t result;
+  
+  if ( ( x < 0 && y > 0) || (x > 0 && y < 0 ) ) {
+    result = abs(y+x);
+  }
+  if ( x > 0 && y > 0 ) {
+    result = abs(x-y);
+  }
+  if ( x < 0 && y < 0 ) {
+    result = abs(x-y);
+  }
+
+  if ( result > 180. ) {
+    result = 360.-result;
+  }
+
+  return result;
 }
