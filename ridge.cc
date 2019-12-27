@@ -15,19 +15,23 @@ TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug      = false;
 bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
-Float_t gDataCap  = 0.4; // percentage of data to be used in analysis
+bool DMode        = false; // deuterium
+Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
 TDatabasePDG db;
 
 
 //Float_t PhiPQ(TVector3, TLorentzVector);
 void export_hist(TH2 *, TString, TString options = "colz");
+//void export_hist(TH1F, TString, TString options = "");
 void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier = "" );
 void full_ridge_plots(TCorrelation* );
+void full_1d_plots(TCorrelation*);
 void side_by_side(TH2 *,TH2 *, TString);
 Float_t ComputeThetaPQ(TLorentzVector, TLorentzVector);
 Float_t ComputePhiPQ(TLorentzVector, TLorentzVector);
 TLorentzVector VirtualFrame(TLorentzVector, double, double, double);
 Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad);
+
 
 // MAIN
 void ridge(TString target = "")
@@ -38,34 +42,60 @@ void ridge(TString target = "")
   } else {
     out_path += "data/";
   }
-  
-  TFile *f;
+
+  TChain ch("tree_data");
+  TChain ech("e_rec");
+  //TChain *f;
   Double_t kEbeam;
   if ( m_simulation ) {
-    f = new TFile("/home/luciano/Physics/CLAS/data/tree_output.root");
+    //f = new TChain("/home/luciano/Physics/CLAS/data/tree_output.root");
+    ch.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
+    ech.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
     kEbeam = 11.0;
   } else {
-    //f = new TFile("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
-    if ( target == "Pb" ) {
-      f = new TFile("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
-    } else if ( target == "Fe" ) {
-      f = new TFile("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+    //f = new TChain("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
+    if ( target == "Pb" && !DMode ) {
+      //f = new TChain("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+      ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+      ech.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+    } else if ( target == "Fe" && !DMode) {
+      //f = new TChain("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+      ch.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+      ech.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
     } else {
-      target = "C";
-      f = new TFile("/home/luciano/Physics/CLAS/data/full_C_files.root");
+      if ( !DMode ) {
+	target = "C";
+	//f = new TChain("/home/luciano/Physics/CLAS/data/full_C_files.root");
+	ch.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
+	ech.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
+      }
     }
     kEbeam = 5.014;
   }
+  if ( DMode ) {
+    target = "D";
+    ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+    ch.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+    ch.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
+    ech.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
+    ech.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
+    ech.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
+  }
+  
   Double_t kChargedPionMass = db.GetParticle(211)->Mass();
   Double_t kProtonMass = db.GetParticle(2212)->Mass();
   Double_t kRhoMass = db.GetParticle(113)->Mass();
-  TTree *auxtree = (TTree*) f->GetKey("tree_data")->ReadObj();
+  //TTree *auxtree = (TTree*) f->GetKey("tree_data")->ReadObj();
+  
   Int_t Entries = 0;
-  Entries = auxtree->GetEntries();
+  //Entries = auxtree->GetEntries();
+  Entries = ch.GetEntries();
   
   // tree reader for thrown particles and scattered electron
-  TTreeReader th("tree_data",f);
-  TTreeReader e("e_rec",f);
+  TTreeReader th(&ch);
+  TTreeReader e(&ech);
+  //TTreeReader th("tree_data",f);
+  //TTreeReader e("e_rec",f);
     
   TTreeReaderArray<Int_t> pid(th,"pid");
   TTreeReaderValue<Float_t> q2(th,"Q2");
@@ -148,8 +178,13 @@ void ridge(TString target = "")
     // event cuts
     if ( *ew < 2.0 || *eq2 < 1.0 ) // DIS cut
       continue;
-    if ( *TargType == 1 ) // D == 1; heavy nuclei == 2
+    if ( *TargType == 1 && !DMode ) { // D == 1; heavy nuclei == 2
       continue;
+    } else if ( *TargType != 1 && DMode ) {
+      continue;
+    }
+      
+    
 
     //////////////////////////
     // pions in the event
@@ -247,6 +282,26 @@ void ridge(TString target = "")
       piminus4v_boosted.push_back(aux_boost);
     }
 
+    // rotation and boost for old particle
+    for ( int i = 0; i < old4v.size(); i++ ) {
+      TLorentzVector aux_rotation;
+      aux_rotation = VirtualFrame(old4v[i],angle1,angle2,0);
+      old4v_rotated.push_back(aux_rotation);
+      TLorentzVector aux_boost;
+      aux_boost = VirtualFrame(old4v[i],angle1,angle2,-boost);
+      old4v_boosted.push_back(aux_boost);
+      
+    }
+    /*
+    if ( events > 200 && old4v.size() > 0 ) {
+      cout << "regulare" << endl;
+      old4v[0].Print();
+      cout << "rot" << endl;
+      old4v_rotated[0].Print();
+      cout << "booste" << endl;
+      old4v_boosted[0].Print();
+    }
+    */
     if ( m_debug ) {
       cout << "---------------------------------------------------------------" << endl;
       cout << "pospions: " << pos_pions.size() << endl;
@@ -362,8 +417,8 @@ void ridge(TString target = "")
     // old negative pion:
     for ( int j = 0; j < piminus4v.size(); j++ ) {
       old4v.push_back(piminus4v[j]);
-      old4v_rotated.push_back(piminus4v_rotated[j]);
-      old4v_boosted.push_back(piminus4v_boosted[j]);
+      //old4v_rotated.push_back(piminus4v_rotated[j]);
+      //old4v_boosted.push_back(piminus4v_boosted[j]);
     }
     
 
@@ -394,6 +449,18 @@ void ridge(TString target = "")
   full_ridge_plots(corr_ang);
   full_ridge_plots(corr_apq);
   full_ridge_plots(corr_boo);
+
+  full_1d_plots(corr_ang);
+  full_1d_plots(corr_apq);
+  full_1d_plots(corr_boo);
+  /*
+  export_hist(corr_ang->GetCorr1D(1), out_path+"1D_"+corr_ang->GetVar(1)+".png");
+  export_hist(corr_ang->GetCorr1D(2), out_path+"1D_"+corr_ang->GetVar(2)+".png");
+  export_hist(corr_apq->GetCorr1D(1), out_path+"1D_"+corr_apq->GetVar(1)+".png");
+  export_hist(corr_apq->GetCorr1D(2), out_path+"1D_"+corr_apq->GetVar(2)+".png");
+  export_hist(corr_boo->GetCorr1D(1), out_path+"1D_"+corr_boo->GetVar(1)+".png");
+  export_hist(corr_boo->GetCorr1D(2), out_path+"1D_"+corr_boo->GetVar(2)+".png");
+  */
   //full_ridge_plots(corr_eta);
   
 
@@ -428,6 +495,16 @@ void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
   delete c1;
 }
 
+void export_hist(TH1F h2, TString out_filename, TString options = "") {
+  auto c1 = new TCanvas();
+  c1->SetCanvasSize(800,800);
+  //c1->SetLeftMargin(0.15);
+  c1->SetRightMargin(0.15);
+  h2.Draw(options);
+  c1->SaveAs(out_filename);
+  delete c1;
+}
+
 
 void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier)
 {
@@ -442,7 +519,7 @@ void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier)
   h2.GetXaxis()->CenterTitle(true);
   h2.GetXaxis()->SetTitleOffset(1.5);
   h2.GetYaxis()->CenterTitle(true);
-
+  h2.GetYaxis()->SetTitleOffset(1.5);
   // main 2d plot 
   TString out_filename = out_path+out_path_modifier+out_name;
   c1->SaveAs(out_filename);
@@ -515,6 +592,16 @@ void full_ridge_plots(TCorrelation * corr)
   ridge_plot(corr->GetSE(),"ridge_same_"+connector+".png", connector2);
   ridge_plot(corr->GetME(),"ridge_multi_"+connector+".png", connector2);
   ridge_plot(corr->GetCO(),"ridge_correlation_"+connector+".png", connector2);
+}
+
+void full_1d_plots(TCorrelation* corr)
+{
+  for ( int var = 1; var < 3; var++ ) {
+    TString con = "1D_"+corr->GetVar(var)+"_";
+    export_hist(corr->GetCorr1D(var), out_path+con+"corr.png");
+    export_hist(corr->GetSame1D(var), out_path+con+"same.png");
+    export_hist(corr->GetMult1D(var), out_path+con+"mult.png");
+  }
 }
 
 TLorentzVector VirtualFrame(TLorentzVector v1,
