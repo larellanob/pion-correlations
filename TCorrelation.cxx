@@ -36,6 +36,27 @@ public:
   TH2F GetRecoPlus()   { return fRecoPlus; }
   TH2F GetRecoMinus()   { return fRecoMinus; }
   TH2F GetCorr() { return fCorrelation2D; }
+  TH1F GetCorr1D(int i = 1) {
+    if ( i == 2 ) {
+      return fCorrelation1D2;
+    } else {
+      return fCorrelation1D1;
+    }
+  }
+  TH1F GetSame1D(int i = 1) {
+    if ( i == 2 ) {
+      return fSameEvent1D2;
+    } else {
+      return fSameEvent1D1;
+    }
+  }
+  TH1F GetMult1D(int i = 1) {
+    if ( i == 2 ) {
+      return fMultiEvent1D2;
+    } else {
+      return fMultiEvent1D1;
+    }
+  }
   TString GetVar( int a ) {
     if ( a == 1 ) return fVar1;
     else if ( a == 2 ) return fVar2;
