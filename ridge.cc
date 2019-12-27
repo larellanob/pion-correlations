@@ -146,7 +146,7 @@ void ridge(TString target = "")
   TLorentzVector oldgamma;
 
   TCorrelation * corr_ang = new TCorrelation("phi","theta",target);
-  TCorrelation * corr_apq = new TCorrelation("phi_PQ","theta_PQ", target);
+  TCorrelation * corr_apq = new TCorrelation("phiPQ","thetaPQ", target);
   TCorrelation * corr_boo = new TCorrelation("phiPQboosted","thetaPQboosted",target);
   //TCorrelation * corr_eta = new TCorrelation("eta","theta", target);
   //TCorrelation * corr_vir = new TCorrelation("vphi","vtheta", target);
