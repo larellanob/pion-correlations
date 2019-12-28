@@ -12,11 +12,11 @@
 #include "TCorrelation.cxx"
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
-bool m_debug      = false;
+bool m_debug      = true;
 bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
+Float_t gDataCap  = 0.001; // percentage of data to be used in analysis
 TDatabasePDG db;
 
 
@@ -143,7 +143,7 @@ void ridge(TString target = "")
     cout << "DEBUG: entering main tree reading loop" << endl;
   // main file/tree reading loop
   TLorentzVector virtual_photon;
-  TLorentzVector oldgamma;
+  //TLorentzVector oldgamma;
 
   TCorrelation * corr_ang = new TCorrelation("phi","theta",target);
   TCorrelation * corr_apq = new TCorrelation("phiPQ","thetaPQ", target);
@@ -167,7 +167,7 @@ void ridge(TString target = "")
     //oldgamma = virtual_photon; // true old gamma
 
     virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
-    oldgamma = virtual_photon; // actually the same old gamma
+    //oldgamma = virtual_photon; // actually the same old gamma
 
     if ( events % 1000000 == 0 ) {
       cout << events << "/" << gDataCap*Entries << endl;
@@ -248,6 +248,7 @@ void ridge(TString target = "")
     // event virtual photon frame
     Double_t Egamma = virtual_photon.E();
     Double_t angle1 = TMath::Pi() + atan2((*epy),(*epx));
+    //Double_t angle1 = 0;
     virtual_photon.RotateZ(-angle1);
 
     double numer = kEbeam-(*epz);
@@ -258,10 +259,14 @@ void ridge(TString target = "")
     } else if ( numer/denom >= TMath::Pi() ){
       angle2 = 2*TMath::Pi()*acos(numer/denom);
     }
+    //Double_t angle2 = 0;
+    //Double_t angle2 = numer/denom;
     virtual_photon.RotateY(-angle2);
     Double_t boost  = virtual_photon.P()/(Egamma+kProtonMass);
     virtual_photon.Boost(0,0,-boost);
 
+
+    //cout << " ------------ " << endl;
     //////////////////////////////
     // rotation and boost
     for ( int i = 0; i < piplus4v.size(); i++ ) {
@@ -271,8 +276,13 @@ void ridge(TString target = "")
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(piplus4v[i],angle1,angle2,-boost);
       piplus4v_boosted.push_back(aux_boost);
+      //cout << "4v " << piplus4v_rotated[i].Phi()*180./TMath::Pi() << endl;
     }
 
+    for ( int i = 0; i < pos_pions.size(); i++ )
+      {
+        //cout << "phipq " << PhiPQ[i] << endl;
+      }
     for ( int i = 0; i < piminus4v.size(); i++ ) {
       TLorentzVector aux_rotation;
       aux_rotation = VirtualFrame(piminus4v[i],angle1,angle2,0);
@@ -441,7 +451,8 @@ void ridge(TString target = "")
 
   //corr_apq->NormalizeSame(NTriggers);
   //corr_apq->NormalizeMulti();
-  
+
+  /*
   corr_ang->FillCorrelation();
   corr_apq->FillCorrelation();
   corr_boo->FillCorrelation();
@@ -453,6 +464,28 @@ void ridge(TString target = "")
   full_1d_plots(corr_ang);
   full_1d_plots(corr_apq);
   full_1d_plots(corr_boo);
+  */
+  TH2F * reco1 = new TH2F("reco1","test",10,0,10,10,0,10);
+  TH2F * reco2 = new TH2F("reco2","test",10,0,10,10,0,10);
+  TH2F * reco3 = new TH2F("reco3","test",10,0,10,10,0,10);
+  *reco1 = corr_apq->GetReco();
+  *reco2 = corr_apq->GetRecoPlus();
+  *reco3 = corr_apq->GetRecoMinus();
+
+  new TCanvas();
+  reco1->Draw("colz");
+  new TCanvas();
+  reco2->Draw("colz");
+  new TCanvas();
+  reco3->Draw("colz");
+  /*
+  new TCanvas();
+  corr_apq->GetReco().Draw("colz");
+  new TCanvas();
+  corr_apq->GetRecoPlus().Draw("colz");
+  new TCanvas();
+  corr_apq->GetRecoMinus().Draw("colz");
+  */
   /*
   export_hist(corr_ang->GetCorr1D(1), out_path+"1D_"+corr_ang->GetVar(1)+".png");
   export_hist(corr_ang->GetCorr1D(2), out_path+"1D_"+corr_ang->GetVar(2)+".png");
@@ -519,7 +552,7 @@ void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier)
   h2.GetXaxis()->CenterTitle(true);
   h2.GetXaxis()->SetTitleOffset(1.5);
   h2.GetYaxis()->CenterTitle(true);
-  h2.GetYaxis()->SetTitleOffset(1.5);
+  h2.GetYaxis()->SetTitleOffset(2.0);
   // main 2d plot 
   TString out_filename = out_path+out_path_modifier+out_name;
   c1->SaveAs(out_filename);
@@ -617,8 +650,8 @@ TLorentzVector VirtualFrame(TLorentzVector v1,
 
 Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad)
 {
-  Float_t x = x_rad*180./TMath::Pi();
-  Float_t y = y_rad*180./TMath::Pi();
+  Double_t x = x_rad*180./TMath::Pi();
+  Double_t y = y_rad*180./TMath::Pi();
 
   Float_t result;
   
