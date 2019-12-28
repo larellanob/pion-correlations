@@ -136,6 +136,22 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
   fSameEvent1D2 = ns12;
   fMultiEvent1D1 = nm11;
   fMultiEvent1D2 = nm12;
+
+  // reco
+
+  TH2F reco1("reco_trig_partner_"+var1+"_"+var2+"_"+target,
+	     "reconstructed #pi^{#pm};#Delta#"+var1+";#Delta#"+var2,
+	     72,-180,180,36,0,180);
+  TH2F reco2("reco_trig_"+var1+"_"+var2+"_"+target,
+	     "reconstructed #pi^{+};#Delta#"+var1+";#Delta#"+var2,
+	     72,-180,180,36,0,180);
+  TH2F reco3("reco_partner_"+var1+"_"+var2+"_"+target,
+	     "reconstructed #pi^{-};#Delta#"+var1+";#Delta#"+var2,
+	     72,-180,180,36,0,180);
+  fReco = reco1;
+  fRecoPlus = reco2;
+  fRecoMinus = reco3;
+  
 }
 
 void TCorrelation::FillCorrelation()
