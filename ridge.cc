@@ -12,11 +12,11 @@
 #include "TCorrelation.cxx"
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
-bool m_debug      = true;
+bool m_debug      = false;
 bool m_simulation = false;
 bool old_plus     = false; // if false, use old_minus
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 0.001; // percentage of data to be used in analysis
+Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
 TDatabasePDG db;
 
 
@@ -246,29 +246,26 @@ void ridge(TString target = "")
     //////////////////////////////
     // VIRTUAL PHOTON FRAME
     // event virtual photon frame
-    Double_t Egamma = virtual_photon.E();
-    Double_t angle1 = TMath::Pi() + atan2((*epy),(*epx));
-    //Double_t angle1 = 0;
-    virtual_photon.RotateZ(-angle1);
 
-    double numer = kEbeam-(*epz);
+    // rotation 1
+    Double_t Egamma = virtual_photon.E();
+    Double_t angle1 = - atan2((*epy),(*epx));    
+    virtual_photon.RotateZ(angle1);
+
+    // rotation 2
+    double numer = virtual_photon.Z();
     double denom = virtual_photon.P();
     Double_t angle2;
-    if ( numer/denom < TMath::Pi() ){
-      angle2 = acos(numer/denom);
-    } else if ( numer/denom >= TMath::Pi() ){
-      angle2 = 2*TMath::Pi()*acos(numer/denom);
-    }
-    //Double_t angle2 = 0;
-    //Double_t angle2 = numer/denom;
-    virtual_photon.RotateY(-angle2);
+    angle2 = acos(numer/denom);
+    virtual_photon.RotateY(angle2);
+    
+    // boost
     Double_t boost  = virtual_photon.P()/(Egamma+kProtonMass);
     virtual_photon.Boost(0,0,-boost);
 
 
-    //cout << " ------------ " << endl;
     //////////////////////////////
-    // rotation and boost
+    // rotation and boost for pions
     for ( int i = 0; i < piplus4v.size(); i++ ) {
       TLorentzVector aux_rotation;
       aux_rotation = VirtualFrame(piplus4v[i],angle1,angle2,0);
@@ -276,13 +273,8 @@ void ridge(TString target = "")
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(piplus4v[i],angle1,angle2,-boost);
       piplus4v_boosted.push_back(aux_boost);
-      //cout << "4v " << piplus4v_rotated[i].Phi()*180./TMath::Pi() << endl;
     }
 
-    for ( int i = 0; i < pos_pions.size(); i++ )
-      {
-        //cout << "phipq " << PhiPQ[i] << endl;
-      }
     for ( int i = 0; i < piminus4v.size(); i++ ) {
       TLorentzVector aux_rotation;
       aux_rotation = VirtualFrame(piminus4v[i],angle1,angle2,0);
@@ -302,16 +294,8 @@ void ridge(TString target = "")
       old4v_boosted.push_back(aux_boost);
       
     }
-    /*
-    if ( events > 200 && old4v.size() > 0 ) {
-      cout << "regulare" << endl;
-      old4v[0].Print();
-      cout << "rot" << endl;
-      old4v_rotated[0].Print();
-      cout << "booste" << endl;
-      old4v_boosted[0].Print();
-    }
-    */
+
+    // debug
     if ( m_debug ) {
       cout << "---------------------------------------------------------------" << endl;
       cout << "pospions: " << pos_pions.size() << endl;
@@ -452,7 +436,7 @@ void ridge(TString target = "")
   //corr_apq->NormalizeSame(NTriggers);
   //corr_apq->NormalizeMulti();
 
-  /*
+  
   corr_ang->FillCorrelation();
   corr_apq->FillCorrelation();
   corr_boo->FillCorrelation();
@@ -464,7 +448,7 @@ void ridge(TString target = "")
   full_1d_plots(corr_ang);
   full_1d_plots(corr_apq);
   full_1d_plots(corr_boo);
-  */
+  
   TH2F * reco1 = new TH2F("reco1","test",10,0,10,10,0,10);
   TH2F * reco2 = new TH2F("reco2","test",10,0,10,10,0,10);
   TH2F * reco3 = new TH2F("reco3","test",10,0,10,10,0,10);
@@ -640,12 +624,18 @@ void full_1d_plots(TCorrelation* corr)
 TLorentzVector VirtualFrame(TLorentzVector v1,
 			    double angle1, double angle2, double boost)
 {
+  /*
   TLorentzVector *v2;
   v2 = &v1;
   v2->RotateZ(-angle1);
   v2->RotateY(-angle2);
   v2->Boost(0,0,-boost);
   return *v2;
+  */
+  v1.RotateZ(angle1);
+  v1.RotateY(angle2);
+  v1.Boost(0,0,-boost);
+  return v1;
 }
 
 Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad)
