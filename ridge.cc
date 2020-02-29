@@ -18,6 +18,7 @@ bool old_plus     = false; // if false, use old_minus
 bool DMode        = false; // deuterium
 Float_t gDataCap  = 0.1; // percentage of data to be used in analysis
 TDatabasePDG db;
+TString gMode = "+-"; // choose +- or ++
 
 
 //Float_t PhiPQ(TVector3, TLorentzVector);
@@ -43,29 +44,27 @@ void ridge(TString target = "")
     out_path += "data/";
   }
 
+  // Chain for hadrons (ch) and chain for trigger electrons (ech)
   TChain ch("tree_data");
   TChain ech("e_rec");
-  //TChain *f;
+
+  // Add files to the chains depending on target
+  // Also sets beam energy
   Double_t kEbeam;
   if ( m_simulation ) {
-    //f = new TChain("/home/luciano/Physics/CLAS/data/tree_output.root");
     ch.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
     ech.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
     kEbeam = 11.0;
   } else {
-    //f = new TChain("/home/luciano/Physics/CLAS/data/CFFTree_data.root");
     if ( target == "Pb" && !DMode ) {
-      //f = new TChain("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
       ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
       ech.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
     } else if ( target == "Fe" && !DMode) {
-      //f = new TChain("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
       ch.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
       ech.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
     } else {
       if ( !DMode ) {
 	target = "C";
-	//f = new TChain("/home/luciano/Physics/CLAS/data/full_C_files.root");
 	ch.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
 	ech.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
       }
@@ -81,22 +80,22 @@ void ridge(TString target = "")
     ech.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
     ech.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
   }
-  
+
+  // Known particle masses
   Double_t kChargedPionMass = db.GetParticle(211)->Mass();
   Double_t kProtonMass = db.GetParticle(2212)->Mass();
   Double_t kRhoMass = db.GetParticle(113)->Mass();
-  //TTree *auxtree = (TTree*) f->GetKey("tree_data")->ReadObj();
-  
+
+  // Full chain entries
   Int_t Entries = 0;
-  //Entries = auxtree->GetEntries();
   Entries = ch.GetEntries();
   
-  // tree reader for thrown particles and scattered electron
+  // Tree reader for hadrons and scattered electron
   TTreeReader th(&ch);
   TTreeReader e(&ech);
-  //TTreeReader th("tree_data",f);
-  //TTreeReader e("e_rec",f);
-    
+
+  // Variables to be read from trees
+  // hadrons
   TTreeReaderArray<Int_t> pid(th,"pid");
   TTreeReaderValue<Float_t> q2(th,"Q2");
   TTreeReaderArray<Float_t> px(th,"Px");
@@ -110,7 +109,8 @@ void ridge(TString target = "")
   TTreeReaderArray<Float_t> Phi(th,"Phi");
   TTreeReaderArray<Float_t> ThetaPQ(th,"ThetaPQ");
   TTreeReaderArray<Float_t> PhiPQ(th,"PhiPQ");
-  
+
+  // electrons
   TTreeReaderValue<Float_t> epx(e,"Pex");
   TTreeReaderValue<Float_t> epy(e,"Pey");
   TTreeReaderValue<Float_t> epz(e,"Pez");
@@ -119,8 +119,10 @@ void ridge(TString target = "")
     
   cout << "working" << endl;
 
-  std::vector<int> pos_pions;
-  std::vector<int> neg_pions;
+
+  // Vectors to be filled with pions
+  std::vector<int> pos_pion_index;
+  std::vector<int> neg_pion_index;
 
   std::vector<TLorentzVector> piplus4v;
   std::vector<TLorentzVector> piminus4v;
@@ -134,45 +136,42 @@ void ridge(TString target = "")
   std::vector<TLorentzVector> old4v;
   std::vector<TLorentzVector> old4v_rotated;
   std::vector<TLorentzVector> old4v_boosted;
-  
-  
+
+
+  // Setting some counters
   UInt_t events = 0;
-  int counter=0;
+  int processed_events=0;
     
-  if ( m_debug )
-    cout << "DEBUG: entering main tree reading loop" << endl;
-  // main file/tree reading loop
   TLorentzVector virtual_photon;
   //TLorentzVector oldgamma;
 
+
+  // TCorrelation objects initialization
+  // angular (lab frame)  correlation
   TCorrelation * corr_ang = new TCorrelation("phi","theta",target);
+  // angular (pq frame) correlation
   TCorrelation * corr_apq = new TCorrelation("phiPQ","thetaPQ", target);
+  // angular (virtual photon frame) correlation
   TCorrelation * corr_boo = new TCorrelation("phiPQboosted","thetaPQboosted",target);
   //TCorrelation * corr_eta = new TCorrelation("eta","theta", target);
   //TCorrelation * corr_vir = new TCorrelation("vphi","vtheta", target);
 
+  // Number of trigger particles (for normalization)
   ULong_t NTriggers = 0;
+
+  if ( m_debug )
+    cout << "DEBUG: entering main tree reading loop" << endl;
+  // main file/tree reading loop
+
+  ///////////////////////////
+  //// LOOP ////////////
+  ///////////////////////////
   while ( th.Next()  && events < (gDataCap * Entries) ) {
     e.Next();
     events++;
-
-    
-    Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
-    if ( scattered_energy < 0.005 )
-      cout << "WARNING: Low e' energy " << scattered_energy << endl; 
-    if ( scattered_energy > kEbeam  )
-      cout << "WARNING: High e' energy = " <<  scattered_energy << endl;
-
-    // virtual photon frame is per event
-    //oldgamma = virtual_photon; // true old gamma
-
-    virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
-    //oldgamma = virtual_photon; // actually the same old gamma
-
     if ( events % 1000000 == 0 ) {
       cout << events << "/" << gDataCap*Entries << endl;
     }
-    
 
     //////////////////////////
     // event cuts
@@ -183,44 +182,60 @@ void ridge(TString target = "")
     } else if ( *TargType != 1 && DMode ) {
       continue;
     }
-      
-    
+
+    // Electron energy
+    Double_t scattered_energy = sqrt((*epx)*(*epx)+(*epy)*(*epy)+(*epz)*(*epz));
+    if ( scattered_energy < 0.005 )
+      cout << "WARNING: Low e' energy " << scattered_energy << endl; 
+    if ( scattered_energy > kEbeam  )
+      cout << "WARNING: High e' energy = " <<  scattered_energy << endl;
+
+    // Virtual photon frame is per event
+    // oldgamma = virtual_photon; // true old gamma
+
+    // Virtual photon 4vector
+    virtual_photon = {-(*epx),-(*epy),kEbeam-(*epz),kEbeam-scattered_energy};
+    //oldgamma = virtual_photon; // actually the same old gamma
 
     //////////////////////////
-    // pions in the event
-    pos_pions.clear();
-    neg_pions.clear();
+    // Pions in the event
+    pos_pion_index.clear();
+    neg_pion_index.clear();
     
-    // pi+ pi+
-    /*
+    // pi+ pi+ mode
+    if ( gMode == "++" ) { 
       bool trigger = false;
-    for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
-      if ( pid[i] == 211  && !trigger ) {
-	pos_pions.push_back(i);
-	trigger = true;
-	continue;
-      }
-      if ( pid[i] == 211 && trigger ) {
-	neg_pions.push_back(i);
+      // first pi+ found is stored at pos_pion_index[0]
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( pid[i] == 211  && !trigger ) {
+	  pos_pion_index.push_back(i);
+	  trigger = true;
+	  continue;
+	}
+	// once trigger is set, other pi+ are pushed into NEG_PION_INDEX vector
+	// so as to not rewrite a large portion of the code
+	// consider renaming these vectors to "triggers" and "partners" instead
+	if ( pid[i] == 211 && trigger ) {
+	  neg_pion_index.push_back(i);
+	}
       }
     }
-    */
 
-    // pi+ pi-
-    for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
-      if ( pid[i] == 211 ) {
-	pos_pions.push_back(i);
-      }
-      if ( pid[i] == -211 ) {
-	neg_pions.push_back(i);
+    // pi+ pi- indexes
+    if ( gMode == "+-" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( pid[i] == 211 ) {
+	  pos_pion_index.push_back(i);
+	}
+	if ( pid[i] == -211 ) {
+	  neg_pion_index.push_back(i);
+	}
       }
     }
     
     // make sure of this, normalization might depend on it
-    if ( pos_pions.size() == 0  || neg_pions.size() == 0 )
+    if ( pos_pion_index.size() == 0  || neg_pion_index.size() == 0 )
       continue;
-
-
 
     ///////////////////////////
     // Pions 4vectors
@@ -230,6 +245,7 @@ void ridge(TString target = "")
     piminus4v_rotated.clear();
     piplus4v_boosted.clear();
     piminus4v_boosted.clear();
+
     
     for ( int i = 0; i < pid.GetSize(); i++ ) {
       if ( pid[i] == 211 ) {
@@ -298,13 +314,13 @@ void ridge(TString target = "")
     // debug
     if ( m_debug ) {
       cout << "---------------------------------------------------------------" << endl;
-      cout << "pospions: " << pos_pions.size() << endl;
-      for ( int i = 0; i < pos_pions.size(); i++ ) {
-	cout << "pz: " << pz[pos_pions[i]] << endl;
-	cout << "theta: " << Theta[pos_pions[i]] << endl;
-	cout << "phi: " << Phi[pos_pions[i]] << endl;
-	cout << "thetapq: " << ThetaPQ[pos_pions[i]] << endl;
-	cout << "phipq: " << PhiPQ[pos_pions[i]] << endl;
+      cout << "pospions: " << pos_pion_index.size() << endl;
+      for ( int i = 0; i < pos_pion_index.size(); i++ ) {
+	cout << "pz: " << pz[pos_pion_index[i]] << endl;
+	cout << "theta: " << Theta[pos_pion_index[i]] << endl;
+	cout << "phi: " << Phi[pos_pion_index[i]] << endl;
+	cout << "thetapq: " << ThetaPQ[pos_pion_index[i]] << endl;
+	cout << "phipq: " << PhiPQ[pos_pion_index[i]] << endl;
 	cout << "-------------" << endl;
       }
       
@@ -332,6 +348,7 @@ void ridge(TString target = "")
 
     ///////////////////////////
     // multi event filling
+    // all possible combinations, i.e. all pi+ are triggers in +- mode
     if ( old4v.size() != 0 && !old_plus && events > 1 ) {
       for ( int i = 0; i < piplus4v.size(); i++ ) {
 	for ( int j = 0; j < old4v.size(); j++ ) {
@@ -361,14 +378,12 @@ void ridge(TString target = "")
       cout << "DEBUG: Entering same event filling" << endl;
     // SAME EVENT FILLING
     bool fill_neg = true;
-
-    if ( m_debug )
-      cout << "DEBUG: entering loop of pos_pions" << endl;
-
+    
     ////////////////////////////////////
     /// SAME EVENT FILLING
 
     for ( int i = 0; i < piplus4v.size(); i++ ) {
+      // Reconstructed pions saving
       corr_ang->FillReco(piplus4v[i].Phi()*180./TMath::Pi(), piplus4v[i].Theta()*180./TMath::Pi());
       corr_apq->FillReco(piplus4v_rotated[i].Phi()*180./TMath::Pi(), piplus4v_rotated[i].Theta()*180./TMath::Pi() );
       corr_boo->FillReco(piplus4v_boosted[i].Phi()*180./TMath::Pi(), piplus4v_boosted[i].Theta()*180./TMath::Pi() );
@@ -379,6 +394,7 @@ void ridge(TString target = "")
       for ( int j = 0; j < piminus4v.size(); j++ ) {
 	float x,y;
 
+	// Correlations filling
 	x = DeltaAngleRad(piplus4v[i].Phi(),piminus4v[j].Phi());
 	y = DeltaAngleRad(piplus4v[i].Theta(),piminus4v[j].Theta());
 	corr_ang->FillSame(x,y);
@@ -391,8 +407,9 @@ void ridge(TString target = "")
 	y = DeltaAngleRad(piplus4v_boosted[i].Theta(),piminus4v_boosted[j].Theta());
 	corr_boo->FillSame(x,y);
 
-	// enters this loop only once per event
+	// Should enter this loop only once per event (when i == 0 and loop once over j)
 	if ( fill_neg ) {
+	  // Reconstructed pions saving
 	  corr_ang->FillReco(piplus4v[j].Phi()*180./TMath::Pi(), piplus4v[j].Theta()*180./TMath::Pi());
 	  corr_apq->FillReco(piplus4v_rotated[j].Phi()*180./TMath::Pi(), piplus4v_rotated[j].Theta()*180./TMath::Pi() );
 	  corr_boo->FillReco(piplus4v_boosted[j].Phi()*180./TMath::Pi(), piplus4v_boosted[j].Theta()*180./TMath::Pi() );
@@ -406,9 +423,9 @@ void ridge(TString target = "")
     }
 
     //////////////////////////////////////
-    // old pion saving
+    // Old pion saving
 
-    // old negative pion:
+    // Old negative pion:
     for ( int j = 0; j < piminus4v.size(); j++ ) {
       old4v.push_back(piminus4v[j]);
       //old4v_rotated.push_back(piminus4v_rotated[j]);
@@ -416,14 +433,14 @@ void ridge(TString target = "")
     }
     
 
-    NTriggers += pos_pions.size();
-    //    if ( pos_pions.size() < 1 )
-    //cout << "what " << pos_pions.size() << endl;
-    counter++;
+    NTriggers += pos_pion_index.size();
+    //    if ( pos_pion_index.size() < 1 )
+    //cout << "what " << pos_pion_index.size() << endl;
+    processed_events++;
   }
 
   cout << "ran through this many events: " << events << endl;
-  cout << "processed this many events: " << counter << endl;
+  cout << "processed this many events: " << processed_events << endl;
   cout << "number of trigger particles: " << NTriggers << endl;
   //side_by_side(ns,ns_vir,"NS_lab_virtual.png");
 
@@ -436,19 +453,23 @@ void ridge(TString target = "")
   //corr_apq->NormalizeSame(NTriggers);
   //corr_apq->NormalizeMulti();
 
-  
+  // FillCorrelation generates the "ridge like" 2D histograms
   corr_ang->FillCorrelation();
   corr_apq->FillCorrelation();
   corr_boo->FillCorrelation();
-  
+
+  // This draws the 2D plots (saves to disk)
   full_ridge_plots(corr_ang);
   full_ridge_plots(corr_apq);
   full_ridge_plots(corr_boo);
 
+  // This draws the 1D plots (saves to disk)
   full_1d_plots(corr_ang);
   full_1d_plots(corr_apq);
   full_1d_plots(corr_boo);
-  
+
+  // Reconstructed pions plots
+  // initialization of arbitrary TH2Fs to get from corr_*
   TH2F * reco1 = new TH2F("reco1","test",10,0,10,10,0,10);
   TH2F * reco2 = new TH2F("reco2","test",10,0,10,10,0,10);
   TH2F * reco3 = new TH2F("reco3","test",10,0,10,10,0,10);
@@ -462,6 +483,13 @@ void ridge(TString target = "")
   reco2->Draw("colz");
   new TCanvas();
   reco3->Draw("colz");
+
+  TString con = "1D_reco_pm_";
+  export_hist(reco1, out_path+con+".png");
+  con = "1D_reco_p_";
+  export_hist(reco2, out_path+con+".png");
+  con = "1D_reco_m_";
+  export_hist(reco3, out_path+con+".png");
   /*
   new TCanvas();
   corr_apq->GetReco().Draw("colz");
@@ -638,23 +666,19 @@ TLorentzVector VirtualFrame(TLorentzVector v1,
   return v1;
 }
 
+
 Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad)
 {
   Double_t x = x_rad*180./TMath::Pi();
   Double_t y = y_rad*180./TMath::Pi();
 
   Float_t result;
-  
-  if ( ( x < 0 && y > 0) || (x > 0 && y < 0 ) ) {
-    result = abs(y+x);
-  }
-  if ( x > 0 && y > 0 ) {
-    result = abs(x-y);
-  }
-  if ( x < 0 && y < 0 ) {
-    result = abs(x-y);
-  }
 
+  result = abs(y-x);
+  
+  if ( result > 360. ) {
+    cout << "Angle difference " << result << ", better check your code!" << endl;
+  }
   if ( result > 180. ) {
     result = 360.-result;
   }
