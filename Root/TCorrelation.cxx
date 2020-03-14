@@ -5,8 +5,8 @@ private:
   TH2F fMultiEvent2D;
   TH2F fCorrelation2D;
   TH2F fReco;
-  TH2F fRecoPlus;
-  TH2F fRecoMinus;
+  TH2F fRecoTriggers;
+  TH2F fRecoPartners;
 
   TH1F fSameEvent1D1;
   TH1F fMultiEvent1D1;
@@ -33,8 +33,8 @@ public:
   TH2F GetME()   { return fMultiEvent2D;  }
   TH2F GetCO()   { return fCorrelation2D;  }
   TH2F GetReco()   { return fReco; }
-  TH2F GetRecoPlus()   { return fRecoPlus; }
-  TH2F GetRecoMinus()   { return fRecoMinus; }
+  TH2F GetRecoTriggers()   { return fRecoTriggers; }
+  TH2F GetRecoPartners()   { return fRecoPartners; }
   TH2F GetCorr() { return fCorrelation2D; }
   TH1F GetCorr1D(int i = 1) {
     if ( i == 2 ) {
@@ -75,11 +75,11 @@ public:
   void FillReco(Float_t var1, Float_t var2, Float_t weight = 1) {
     fReco.Fill(var1,var2, weight);
   }
-  void FillRecoPlus(Float_t var1, Float_t var2, Float_t weight = 1) {
-    fRecoPlus.Fill(var1,var2, weight);
+  void FillRecoTriggers(Float_t var1, Float_t var2, Float_t weight = 1) {
+    fRecoTriggers.Fill(var1,var2, weight);
   }
-  void FillRecoMinus(Float_t var1, Float_t var2, Float_t weight = 1) {
-    fRecoMinus.Fill(var1,var2, weight);
+  void FillRecoPartners(Float_t var1, Float_t var2, Float_t weight = 1) {
+    fRecoPartners.Fill(var1,var2, weight);
   }
   void FillCorrelation();
   void SetBins2D(Float_t, Float_t, Float_t, Float_t, Float_t, Float_t);
@@ -149,8 +149,8 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
 	     "reconstructed #pi^{-};#Delta#"+var1+";#Delta#"+var2,
 	     72,-180,180,36,0,180);
   fReco = reco1;
-  fRecoPlus = reco2;
-  fRecoMinus = reco3;
+  fRecoTriggers = reco2;
+  fRecoPartners = reco3;
   
 }
 
