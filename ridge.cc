@@ -16,16 +16,16 @@ bool m_debug      = false;
 bool m_simulation = false;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 0.2; // fraction of data to be used in analysis (1.0 == full data)
+Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
 TDatabasePDG db;
 // modes
-// ++: trigger pi+ no cuts, assoc pi- no cuts
-// +-: trigger pi+ no cuts, assoc pi+ no cuts
-// zh+-: trigger pi+ zh > 0.5, assocc pi- zh < 0.5
-// zh++: trigger pi+ zh > 0.5, assocc pi+ zh < 0.5
-// zhlluu+-: trigger pi+ zh>0.5, assoc pi- zh in (ll,uu)
-// zhlluu++: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
-TString gMode = "+-"; // choose +- or ++
+// pp: trigger pi+ no cuts, assoc pi- no cuts
+// pm: trigger pi+ no cuts, assoc pi+ no cuts
+// zhpm: trigger pi+ zh > 0.5, assocc pi- zh < 0.5
+// zhpp: trigger pi+ zh > 0.5, assocc pi+ zh < 0.5
+// zhlluupm: trigger pi+ zh>0.5, assoc pi- zh in (ll,uu)
+// zhlluupp: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
+TString gMode = "zhpm"; // choose pm or pp
 
 
 //Float_t PhiPQ(TVector3, TLorentzVector);
@@ -272,15 +272,15 @@ void ridge(TString target = "")
     partners_index.clear();
     
     // modes
-    // +++: trigger pi+ with highest zh, partner all other pi+
-    // ++: trigger pi+ no cuts, assoc pi- no cuts
-    // +-: trigger pi+ no cuts, assoc pi+ no cuts
-    // zh+-: trigger pi+ zh > 0.5, assocc pi- zh < 0.5
-    // zh++: trigger pi+ zh > 0.5, assocc pi+ zh < 0.5
-    // zhlluu+-: trigger pi+ zh>0.5, assoc pi- zh in (ll,uu)
-    // zhlluu++: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
+    // ppp: trigger pi+ with highest zh, partner all other pi+
+    // pp: trigger pi+ no cuts, assoc pi- no cuts
+    // pm: trigger pi+ no cuts, assoc pi+ no cuts
+    // zhpm: trigger pi+ zh > 0.5, assocc pi- zh < 0.5
+    // zhpp: trigger pi+ zh > 0.5, assocc pi+ zh < 0.5
+    // zhlluupm: trigger pi+ zh>0.5, assoc pi- zh in (ll,uu)
+    // zhlluupp: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
     // high-low zh 
-    if ( gMode == "+++" ) {
+    if ( gMode == "ppp" ) {
       int zh_max = 0;
       // first pi+ found is stored at triggers_index[0]
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
@@ -296,14 +296,14 @@ void ridge(TString target = "")
 	  }
 	}
       }
-    } else if ( gMode == "++" ) {
+    } else if ( gMode == "pp" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 ) {
 	  triggers_index.push_back(i);
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "+-" ) {
+    } else if ( gMode == "pm" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 ) {
 	  triggers_index.push_back(i);
@@ -312,7 +312,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh+-" ) {
+    } else if ( gMode == "zhpm" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -321,7 +321,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh++" ) {
+    } else if ( gMode == "zhpp" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -330,7 +330,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0305++" ) {
+    } else if ( gMode == "zh0305pp" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -339,7 +339,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0305+-" ) {
+    } else if ( gMode == "zh0305pm" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -348,7 +348,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0203++" ) {
+    } else if ( gMode == "zh0203pp" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -357,7 +357,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0203+-" ) {
+    } else if ( gMode == "zh0203pm" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -366,7 +366,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0002++" ) {
+    } else if ( gMode == "zh0002pp" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -375,7 +375,7 @@ void ridge(TString target = "")
 	  partners_index.push_back(i);
 	}
       }
-    } else if ( gMode == "zh0002+-" ) {
+    } else if ( gMode == "zh0002pm" ) {
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
 	if ( pid[i] == 211 && Zh[i] > 0.5 ) {
 	  triggers_index.push_back(i);
@@ -530,7 +530,7 @@ void ridge(TString target = "")
 
     ///////////////////////////
     // multi event filling
-    // all possible combinations, i.e. all pi+ are triggers in +- mode
+    // all possible combinations, i.e. all pi+ are triggers in pm mode
     if ( old4v.size() != 0 && !old_triggers && events > 1 ) {
       for ( int i = 0; i < triggers4v.size(); i++ ) {
 	for ( int j = 0; j < old4v.size(); j++ ) {
@@ -729,11 +729,19 @@ void ridge(TString target = "")
   */
   //full_ridge_plots(corr_eta);
 
-
+  // saving of 1d 2pc dataroo
   TFile *fout1 = new TFile("/home/luciano/Physics/CLAS/pion_correlation/"+gMode+"_"+target+".root","recreate");
   corr_boo->GetCorr1D(1).Write();
   corr_boo->GetCorr1D(2).Write();
+  //fout1->Close();
 
+  
+  // saving of color entanglement th2 histograms
+  TFile *fout2 = new TFile("/home/luciano/Physics/CLAS/color_entanglement/"+gMode+"_"+target+".root","recreate");
+  h152->Write();
+  h162->Write();
+  fout2->Close();
+  
   // Color entanglement plotting
   new TCanvas();
   h152->Draw("colz");
