@@ -16,7 +16,7 @@ bool m_debug      = false;
 bool m_simulation = false;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
+Float_t gDataCap  = 0.1; // fraction of data to be used in analysis (1.0 == full data)
 TDatabasePDG db;
 // modes
 // pp: trigger pi+ no cuts, assoc pi- no cuts
@@ -209,6 +209,86 @@ void ridge(TString target = "")
     cout << "DEBUG: entering main tree reading loop" << endl;
   // main file/tree reading loop
 
+
+  ///////
+  // Export ttrees
+  TFile out_tree(out_path+"2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+  
+  TTree triggers_tree("triggers","trigger particles");
+  TTree partners_tree("partners","partner particles");
+  TTree old_evnt_tree("old_evnt","old partners for mixed events ");
+
+  Float_t Q2_w1;
+  Float_t Q2_w2;
+  Float_t Q2_w3;
+  Float_t TargType_w1;
+  Float_t TargType_w2;
+  Float_t TargType_w3;
+  std::vector<Float_t> Zh_w1;
+  std::vector<Float_t> Zh_w2;
+  std::vector<Float_t> Zh_w3;
+  std::vector<Float_t> pid_w1;
+  std::vector<Float_t> pid_w2;
+  std::vector<Float_t> pid_w3;
+  
+  std::vector<Float_t> e_w1;
+  std::vector<Float_t> x_w1;
+  std::vector<Float_t> y_w1;
+  std::vector<Float_t> z_w1;
+  
+  std::vector<Float_t> e_w2;
+  std::vector<Float_t> x_w2;
+  std::vector<Float_t> y_w2;
+  std::vector<Float_t> z_w2;
+  
+  std::vector<Float_t> e_w3;
+  std::vector<Float_t> x_w3;
+  std::vector<Float_t> y_w3;
+  std::vector<Float_t> z_w3;
+  
+  //std::vector<TLorentzVector> pions_w1;
+  //std::vector<TLorentzVector> pions_w2;
+  //std::vector<TLorentzVector> pions_w3;
+
+
+  TString target_mode = target+" "+gMode;
+  
+  TTree Target_Mode("target_mode",target_mode);
+  Target_Mode.Write();
+  
+  triggers_tree.Branch("TargType",&TargType_w1);
+  triggers_tree.Branch("Q2",&Q2_w1);
+  triggers_tree.Branch("Zh",&Zh_w1);
+  triggers_tree.Branch("pid",&pid_w1);
+  triggers_tree.Branch("E",&e_w1);
+  triggers_tree.Branch("Px",&x_w1);
+  triggers_tree.Branch("Py",&y_w1);
+  triggers_tree.Branch("Pz",&z_w1);
+  
+  partners_tree.Branch("TargType",&TargType_w2);
+  partners_tree.Branch("Q2",&Q2_w2);
+  partners_tree.Branch("Zh",&Zh_w2);
+  partners_tree.Branch("pid",&pid_w2);
+  partners_tree.Branch("E",&e_w2);
+  partners_tree.Branch("Px",&x_w2);
+  partners_tree.Branch("Py",&y_w2);
+  partners_tree.Branch("Pz",&z_w2);
+
+  
+  old_evnt_tree.Branch("TargType",&TargType_w3);
+  old_evnt_tree.Branch("Q2",&Q2_w3);
+  old_evnt_tree.Branch("Zh",&Zh_w3);
+  old_evnt_tree.Branch("pid",&pid_w3);
+  old_evnt_tree.Branch("E",&e_w3);
+  old_evnt_tree.Branch("Px",&x_w3);
+  old_evnt_tree.Branch("Py",&y_w3);
+  old_evnt_tree.Branch("Pz",&z_w3);
+  
+
+  // first event, no old 
+  old_evnt_tree.Fill();
+  
+  
   ///////////////////////////
   //// LOOP ////////////
   ///////////////////////////
@@ -417,16 +497,36 @@ void ridge(TString target = "")
     partners4v_boosted.clear();
 
     for ( int i:  triggers_index ) {
-      Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
+      Float_t e = sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass);
       TLorentzVector pi (px[i],py[i],pz[i],e);
       triggers4v.push_back(pi);
     }
 
     for ( int i: partners_index ) {
-      Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
+      Float_t e = sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass);
       TLorentzVector pi (px[i],py[i],pz[i],e);
       partners4v.push_back(pi);
     }
+
+
+    Zh_w1.clear(); Zh_w2.clear();
+    pid_w1.clear(); pid_w2.clear();
+    e_w1.clear(); e_w2.clear();
+    x_w1.clear(); x_w2.clear();
+    y_w1.clear(); y_w2.clear();
+    z_w1.clear(); z_w2.clear();
+
+    for ( int i: triggers_index ) {
+      Zh_w1.push_back(Zh[i]);
+      pid_w1.push_back(pid[i]);
+      Q2_w1 = *eq2;
+    }
+    for ( int j: partners_index ) {
+      Zh_w2.push_back(Zh[j]);
+      pid_w2.push_back(pid[j]);
+      Q2_w2 = *eq2;
+    }
+
     
     /*
     for ( int i = 0; i < pid.GetSize(); i++ ) {
@@ -471,6 +571,10 @@ void ridge(TString target = "")
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(triggers4v[i],angle1,angle2,-boost);
       triggers4v_boosted.push_back(aux_boost);
+      e_w1.push_back(aux_boost.E());
+      x_w1.push_back(aux_boost.X());
+      y_w1.push_back(aux_boost.Y());
+      z_w1.push_back(aux_boost.Z());
     }
 
     for ( int i = 0; i < partners4v.size(); i++ ) {
@@ -480,9 +584,18 @@ void ridge(TString target = "")
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(partners4v[i],angle1,angle2,-boost);
       partners4v_boosted.push_back(aux_boost);
+      e_w2.push_back(aux_boost.E());
+      x_w2.push_back(aux_boost.X());
+      y_w2.push_back(aux_boost.Y());
+      z_w2.push_back(aux_boost.Z());
     }
 
+    triggers_tree.Fill();
+    partners_tree.Fill();
+    
     // rotation and boost for old particle
+    //Zh_w3.clear(); pid_w3.clear(); e_w3.clear(); x_w3.clear(); y_w3.clear(); z_w3.clear();
+    
     for ( int i = 0; i < old4v.size(); i++ ) {
       TLorentzVector aux_rotation;
       aux_rotation = VirtualFrame(old4v[i],angle1,angle2,0);
@@ -490,9 +603,23 @@ void ridge(TString target = "")
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(old4v[i],angle1,angle2,-boost);
       old4v_boosted.push_back(aux_boost);
-      
+      e_w3.push_back(aux_boost.E());
+      x_w3.push_back(aux_boost.X());
+      y_w3.push_back(aux_boost.Y());
+      z_w3.push_back(aux_boost.Z());
     }
+    if ( processed_events != 0 ) {
+      old_evnt_tree.Fill();
+    }
+    Zh_w3.clear(); pid_w3.clear(); e_w3.clear(); x_w3.clear(); y_w3.clear(); z_w3.clear();
+    for ( auto k : partners_index ) {
+      Zh_w3.push_back(Zh[k]);
+      pid_w3.push_back(pid[k]);
+    }
+    Q2_w3 = *eq2;
 
+
+    
     // debug
     if ( m_debug ) {
       cout << "---------------------------------------------------------------" << endl;
@@ -532,6 +659,7 @@ void ridge(TString target = "")
     // multi event filling
     // all possible combinations, i.e. all pi+ are triggers in pm mode
     if ( old4v.size() != 0 && !old_triggers && events > 1 ) {
+      
       for ( int i = 0; i < triggers4v.size(); i++ ) {
 	for ( int j = 0; j < old4v.size(); j++ ) {
 	  Float_t x,y;
@@ -612,6 +740,7 @@ void ridge(TString target = "")
     // Old pion saving
 
     // Old negative pion:
+
     for ( int j = 0; j < partners4v.size(); j++ ) {
       old4v.push_back(partners4v[j]);
       //old4v_rotated.push_back(partners4v_rotated[j]);
@@ -729,6 +858,12 @@ void ridge(TString target = "")
   */
   //full_ridge_plots(corr_eta);
 
+  triggers_tree.Write();
+  partners_tree.Write();
+  old_evnt_tree.Write();
+
+  out_tree.Close();
+  
   // saving of 1d 2pc dataroo
   TFile *fout1 = new TFile("/home/luciano/Physics/CLAS/pion_correlation/"+gMode+"_"+target+".root","recreate");
   corr_boo->GetCorr1D(1).Write();
