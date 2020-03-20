@@ -10,6 +10,7 @@
 #include "TView.h"
 #include "TStyle.h"
 #include "Root/TCorrelation.cxx"
+#include "Root/DeltaAngleRad.cxx"
 
 TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug      = false;
@@ -55,7 +56,7 @@ void ridge(TString target = "")
   } else {
     out_path += "data/";
   }
-
+  
   // Chain for hadrons (ch) and chain for triggers electrons (ech)
   TChain ch("tree_data");
   TChain ech("e_rec");
@@ -227,19 +228,25 @@ void ridge(TString target = "")
   std::vector<Float_t> Zh_w1;
   std::vector<Float_t> Zh_w2;
   std::vector<Float_t> Zh_w3;
-  std::vector<Float_t> pid_w1;
-  std::vector<Float_t> pid_w2;
-  std::vector<Float_t> pid_w3;
+  std::vector<Int_t> pid_w1;
+  std::vector<Int_t> pid_w2;
+  std::vector<Int_t> pid_w3;
   
   std::vector<Float_t> e_w1;
   std::vector<Float_t> x_w1;
   std::vector<Float_t> y_w1;
   std::vector<Float_t> z_w1;
+  std::vector<Float_t> theboo_w1;
+  std::vector<Float_t> phiboo_w1;
+  std::vector<Float_t> eta_w1;
   
   std::vector<Float_t> e_w2;
   std::vector<Float_t> x_w2;
   std::vector<Float_t> y_w2;
   std::vector<Float_t> z_w2;
+  std::vector<Float_t> theboo_w2;
+  std::vector<Float_t> phiboo_w2;
+  std::vector<Float_t> eta_w2;
   
   std::vector<Float_t> e_w3;
   std::vector<Float_t> x_w3;
@@ -264,6 +271,9 @@ void ridge(TString target = "")
   triggers_tree.Branch("Px",&x_w1);
   triggers_tree.Branch("Py",&y_w1);
   triggers_tree.Branch("Pz",&z_w1);
+  triggers_tree.Branch("ThetaBoosted",&theboo_w1);
+  triggers_tree.Branch("PhiBoosted",&phiboo_w1);
+  triggers_tree.Branch("Eta",&eta_w1);
   
   partners_tree.Branch("TargType",&TargType_w2);
   partners_tree.Branch("Q2",&Q2_w2);
@@ -273,6 +283,9 @@ void ridge(TString target = "")
   partners_tree.Branch("Px",&x_w2);
   partners_tree.Branch("Py",&y_w2);
   partners_tree.Branch("Pz",&z_w2);
+  partners_tree.Branch("ThetaBoosted",&theboo_w2);
+  partners_tree.Branch("PhiBoosted",&phiboo_w2);
+  partners_tree.Branch("Eta",&eta_w2);
 
   
   old_evnt_tree.Branch("TargType",&TargType_w3);
@@ -515,6 +528,9 @@ void ridge(TString target = "")
     x_w1.clear(); x_w2.clear();
     y_w1.clear(); y_w2.clear();
     z_w1.clear(); z_w2.clear();
+    theboo_w1.clear(); theboo_w2.clear();
+    phiboo_w1.clear(); phiboo_w2.clear();
+    eta_w1.clear(); eta_w2.clear();
 
     for ( int i: triggers_index ) {
       Zh_w1.push_back(Zh[i]);
@@ -575,6 +591,9 @@ void ridge(TString target = "")
       x_w1.push_back(aux_boost.X());
       y_w1.push_back(aux_boost.Y());
       z_w1.push_back(aux_boost.Z());
+      theboo_w1.push_back(aux_boost.Theta()*180./TMath::Pi());
+      phiboo_w1.push_back(aux_boost.Phi()*180./TMath::Pi());
+      eta_w1.push_back(0.5* log((triggers4v[i].E()+triggers4v[i].Z()) / (triggers4v[i].E()-triggers4v[i].Z())) );
     }
 
     for ( int i = 0; i < partners4v.size(); i++ ) {
@@ -588,6 +607,9 @@ void ridge(TString target = "")
       x_w2.push_back(aux_boost.X());
       y_w2.push_back(aux_boost.Y());
       z_w2.push_back(aux_boost.Z());
+      theboo_w2.push_back(aux_boost.Theta()*180./TMath::Pi());
+      phiboo_w2.push_back(aux_boost.Phi()*180./TMath::Pi());
+      eta_w2.push_back(0.5* log((partners4v[i].E()+partners4v[i].Z()) / (partners4v[i].E()-partners4v[i].Z())) );
     }
 
     triggers_tree.Fill();
