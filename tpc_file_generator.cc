@@ -12,12 +12,19 @@
 #include "Root/TCorrelation.cxx"
 #include "Root/DeltaAngleRad.cxx"
 
-TString out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
 bool m_debug      = false;
 bool m_simulation = false;
+TString out_path;
+if ( m_simulation ) {
+  out_path = "/eos/user/a/arellano/CLAS/pion_ridge/";
+ }
+if ( !m_simulation ) {
+  out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
+ }
+
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 0.01; // fraction of data to be used in analysis (1.0 == full data)
+Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
 TDatabasePDG db;
 // modes
 // pp: trigger pi+ no cuts, assoc pi+ no cuts
@@ -44,9 +51,10 @@ Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad);
 
 
 // MAIN
-void ridge(TString mode = "", TString target = "")
+void tpc_file_generator(TString mode = "", TString target = "")
 {
   if ( mode == "" ) {
+    cout << "No mode input, using zhpm as default" << endl;
     mode = gMode;
   } else {
     gMode = mode;
@@ -64,16 +72,33 @@ void ridge(TString mode = "", TString target = "")
   }
   
   // Chain for hadrons (ch) and chain for triggers electrons (ech)
-  TChain ch("tree_data");
+  TChain ch;
+  if ( !m_simulation ) {
+    ch.Add("tree_data");
+  }
+    
   TChain ech("e_rec");
 
   // Add files to the chains depending on target
   // Also sets beam energy
   Double_t kEbeam;
   if ( m_simulation ) {
-    ch.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
-    ech.Add("/home/luciano/Physics/CLAS/data/tree_output.root");
-    kEbeam = 11.0;
+    if ( target == "Pb" ) {
+      ch.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root/tree_accept");
+      ech.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root");
+    } else if ( target == "Fe" ) {
+      ch.Add("/eos/user/a/arellano/CFF/full_Fe_simulations.root/tree_accept");
+      ech.Add("/eos/user/a/arellano/CFF/full_Fe_simulations.root");
+    } else if ( target == "Pb" ) {
+      ch.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root/tree_accept");
+      ech.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root");
+    } else if ( target == "D" ) {
+      ch.Add("/eos/user/a/arellano/CFF/full_D_simulations.root/tree_accept");
+      ech.Add("/eos/user/a/arellano/CFF/full_D_simulations.root");
+      DMode = true;
+    }
+    //kEbeam = 11.0;
+    kEbeam = 5.014;
   } else {
     if ( target == "Pb" ) {
       ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
@@ -90,6 +115,7 @@ void ridge(TString mode = "", TString target = "")
   }
   if ( target == "D" ) {
     DMode = true;
+    gDataCap *= 0.5;
     ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
     ch.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
     ch.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");
@@ -103,7 +129,6 @@ void ridge(TString mode = "", TString target = "")
   Double_t kProtonMass = db.GetParticle(2212)->Mass();
   Double_t kRhoMass = db.GetParticle(113)->Mass();
 
-  cout << kChargedPionMass << endl;
   // Full chain entries
   Int_t Entries = 0;
   Entries = ch.GetEntries();
@@ -120,6 +145,7 @@ void ridge(TString mode = "", TString target = "")
   TTreeReaderArray<Float_t> px(th,"Px");
   TTreeReaderArray<Float_t> py(th,"Py");
   TTreeReaderArray<Float_t> pz(th,"Pz");
+  TTreeReaderArray<Float_t> pt(th,"Pt");
 
   TTreeReaderValue<Int_t> TargType(th,"TargType");
   TTreeReaderArray<Float_t> Zh(th,"Zh");
@@ -156,11 +182,6 @@ void ridge(TString mode = "", TString target = "")
   std::vector<TLorentzVector> old4v_rotated;
   std::vector<TLorentzVector> old4v_boosted;
 
-  TH1 * mom_sum = new TH1F("mom_sum","lab frame;P;entries",100,0,20);
-  TH1 * mom_sum2 = new TH1F("mom_sum2","transformed;P;entries",100,0,20);
-
-  TH1 * energy_sum = new TH1F("energy_sum","lab frame;E;entries",100,0,20);
-  TH1 * energy_sum2 = new TH1F("energy_sum2","transformed;E;entries",100,0,20);
   // Setting some counters
   UInt_t events = 0;
   int processed_events=0;
@@ -168,49 +189,9 @@ void ridge(TString mode = "", TString target = "")
   TLorentzVector virtual_photon;
   //TLorentzVector oldgamma;
 
-
-  // TCorrelation objects initialization
-  // For ridge analysis
-  // angular (lab frame)  correlation
-  TCorrelation * corr_ang = new TCorrelation("phi","theta",target);
-  // angular (pq frame) correlation
-  TCorrelation * corr_apq = new TCorrelation("phiPQ","thetaPQ", target);
-  // angular (virtual photon frame) correlation
-  TCorrelation * corr_boo = new TCorrelation("phiPQboosted","thetaPQboosted",target);
-  //TCorrelation * corr_eta = new TCorrelation("eta","theta", target);
-  //TCorrelation * corr_vir = new TCorrelation("vphi","vtheta", target);
-
   // Number of trigger particles (for normalization)
-  ULong_t NTriggers = 0;
-  
-  
-  // Color entanglement
-  TH2 * h15
-    = new TH2F("h15",
-	       "3vector momentum diff #ne ("+gMode+") Lab frame;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
-  TH2 * h16
-    = new TH2F("h16",
-	       "3vector momentum sum ("+gMode+") Lab frame;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
-
-  TH2 * h151
-    = new TH2F("h151",
-	       "3vector momentum diff ("+gMode+") Rotated;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
-  TH2 * h161
-    = new TH2F("h161",
-	       "3vector momentum sum ("+gMode+") Rotated;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
-
-  TH2 * h152
-    = new TH2F("h152",
-	       "3vector momentum diff ("+gMode+") Transformed;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
-  TH2 * h162
-    = new TH2F("h162",
-	       "3vector momentum sum ("+gMode+") Transformed;Q^{2};P_{diff};counts",
-	       35, 0.5,4 ,30,0,3);
+  int paired_triggers = 0;
+  int total_triggers = 0;
   
   
   if ( m_debug )
@@ -220,7 +201,12 @@ void ridge(TString mode = "", TString target = "")
 
   ///////
   // Export ttrees
-  TFile out_tree("/home/luciano/Physics/CLAS/pion_correlation/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+  TFile out_tree;
+  if ( !m_simulation ) {
+    out_tree.Open("/home/luciano/Physics/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+  } else {
+    out_tree.Open("/eos/user/a/arellano/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+  }
   
   TTree triggers_tree("triggers","trigger particles");
   TTree partners_tree("partners","partner particles");
@@ -245,7 +231,8 @@ void ridge(TString mode = "", TString target = "")
   std::vector<Float_t> z_w1;
   std::vector<Float_t> theboo_w1;
   std::vector<Float_t> phiboo_w1;
-  std::vector<Float_t> eta_w1;
+  std::vector<Float_t> rap_w1;
+  std::vector<Float_t> Pt_w1;
   
   std::vector<Float_t> e_w2;
   std::vector<Float_t> x_w2;
@@ -253,7 +240,8 @@ void ridge(TString mode = "", TString target = "")
   std::vector<Float_t> z_w2;
   std::vector<Float_t> theboo_w2;
   std::vector<Float_t> phiboo_w2;
-  std::vector<Float_t> eta_w2;
+  std::vector<Float_t> rap_w2;
+  std::vector<Float_t> Pt_w2;
   
   std::vector<Float_t> e_w3;
   std::vector<Float_t> x_w3;
@@ -265,10 +253,7 @@ void ridge(TString mode = "", TString target = "")
   //std::vector<TLorentzVector> pions_w3;
 
 
-  TString target_mode = target+" "+gMode;
-  
-  TTree Target_Mode("target_mode",target_mode);
-  Target_Mode.Write();
+
   
   triggers_tree.Branch("Target",&Target_w1);
   triggers_tree.Branch("Q2",&Q2_w1);
@@ -280,7 +265,8 @@ void ridge(TString mode = "", TString target = "")
   triggers_tree.Branch("Pz",&z_w1);
   triggers_tree.Branch("ThetaBoosted",&theboo_w1);
   triggers_tree.Branch("PhiBoosted",&phiboo_w1);
-  triggers_tree.Branch("Eta",&eta_w1);
+  triggers_tree.Branch("y",&rap_w1);
+  triggers_tree.Branch("Pt",&Pt_w1);
   
   partners_tree.Branch("Target",&Target_w2);
   partners_tree.Branch("Q2",&Q2_w2);
@@ -292,7 +278,8 @@ void ridge(TString mode = "", TString target = "")
   partners_tree.Branch("Pz",&z_w2);
   partners_tree.Branch("ThetaBoosted",&theboo_w2);
   partners_tree.Branch("PhiBoosted",&phiboo_w2);
-  partners_tree.Branch("Eta",&eta_w2);
+  partners_tree.Branch("y",&rap_w2);
+  partners_tree.Branch("Pt",&Pt_w2);
 
   
   old_evnt_tree.Branch("Target",&Target_w3);
@@ -330,14 +317,16 @@ void ridge(TString mode = "", TString target = "")
     }
 
     ///////////////////////////
-    // Zh > 1 veto 
+    // Zh > 1 veto and pion count
     double zh_sum = 0;
+    int pioncount = 0;
     for ( int i = 0; i < Zh.GetSize(); i++ ) {
       if ( pid[i] == 211 || pid[i] == -211 ) {
 	zh_sum += Zh[i];
+	pioncount++;
       }
     }
-    if ( zh_sum > 1.0 ) {
+    if ( zh_sum > 1.1 ) { //|| pioncount < 2) {
       continue;
     }
     bool impossible_momentum = false;
@@ -380,20 +369,39 @@ void ridge(TString mode = "", TString target = "")
     // zhlluupm: trigger pi+ zh>0.5, assoc pi- zh in (ll,uu)
     // zhlluupp: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
     // high-low zh 
-    if ( gMode == "ppp" ) {
-      int zh_max = 0;
+    if ( gMode == "zhlead" ) {
+      double zh_max = 0;
       // first pi+ found is stored at triggers_index[0]
       for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
-	if ( pid[i] == 211 ) {
-	  if ( Zh[i] > zh_max ) {
-	    if ( triggers_index.size() > 0 ) {
-	      partners_index.push_back(triggers_index[0]);
-	    }
-	    triggers_index.clear();
-	    triggers_index.push_back(i);
-	  } else {
-	    partners_index.push_back(i);
+	if ( pid[i] != 211 && pid[i] != -211 ) {
+	  continue;
+	}
+	if ( Zh[i] > zh_max ) {
+	  zh_max = Zh[i];
+	  if ( triggers_index.size() > 0 ) {
+	    partners_index.push_back(triggers_index[0]);
 	  }
+	  triggers_index.clear();
+	  triggers_index.push_back(i);
+	} else {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "ptlead" ) {
+      double pt_lead = 0;
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( pid[i] != 211 && pid[i] != -211 ) {
+	  continue;
+	}
+	if ( pt[i] > pt_lead ) {
+	  pt_lead = pt[i];
+	  if ( triggers_index.size() > 0 ) {
+	    partners_index.push_back(triggers_index[0]);
+	  }
+	  triggers_index.clear();
+	  triggers_index.push_back(i);
+	} else {
+	  partners_index.push_back(i);
 	}
       }
     } else if ( gMode == "pp" ) {
@@ -486,26 +494,16 @@ void ridge(TString mode = "", TString target = "")
       }
     }
 
+
+    if ( triggers_index.size() != 0 ) {
+      total_triggers++;
+    }
     
     // make sure of this, normalization might depend on it
-    if ( triggers_index.size() == 0  || partners_index.size() == 0 )
-      continue;
-
-
-    double p_sum = 0;
-    double E_sum = 0;
-    for ( int i = 0; i < Zh.GetSize(); i++ ) {
-      if ( pid[i] == 211 || pid[i] == -211 ) {
-	p_sum += P[i];
-	E_sum+= sqrt(P[i]*P[i] + kChargedPionMass*kChargedPionMass);
-      }
-    }
-    if ( p_sum > 6.0 || E_sum > 6.0 ) {
-      cout << "exiting gracefully " << endl;
+    if ( triggers_index.size() == 0  || partners_index.size() == 0 ) {
       continue;
     }
-    mom_sum->Fill(p_sum);
-    energy_sum->Fill(E_sum);
+
     
     ///////////////////////////
     // Pions 4vectors
@@ -518,7 +516,6 @@ void ridge(TString mode = "", TString target = "")
 
     for ( int i:  triggers_index ) {
       Float_t e = sqrt(px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass);
-      cout << Form("px,py,pz,e %.6f %.6f %.6f %.6f",px[i],py[i],pz[i],e) << endl;
       TLorentzVector pi (px[i],py[i],pz[i],e);
       triggers4v.push_back(pi);
     }
@@ -538,7 +535,8 @@ void ridge(TString mode = "", TString target = "")
     z_w1.clear(); z_w2.clear();
     theboo_w1.clear(); theboo_w2.clear();
     phiboo_w1.clear(); phiboo_w2.clear();
-    eta_w1.clear(); eta_w2.clear();
+    rap_w1.clear(); rap_w2.clear();
+    Pt_w1.clear(); Pt_w2.clear();
 
     for ( int i: triggers_index ) {
       Zh_w1.push_back(Zh[i]);
@@ -552,35 +550,15 @@ void ridge(TString mode = "", TString target = "")
     }
 
     
-    /*
-    for ( int i = 0; i < pid.GetSize(); i++ ) {
-      if ( pid[i] == 211 ) {
-	Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
-	TLorentzVector pi (px[i],py[i],pz[i],e);
-	triggers4v.push_back(pi);
-      } else if ( pid[i] == -211 ) {
-	Float_t e = px[i]*px[i]+py[i]*py[i]+pz[i]*pz[i]+kChargedPionMass*kChargedPionMass;
-	TLorentzVector pi (px[i],py[i],pz[i],e);
-	partners4v.push_back(pi);
-      }
-    }
-    */
+
     //////////////////////////////
     // VIRTUAL PHOTON FRAME
     // event virtual photon frame
-    cout << "virtual photon before "  << endl;
-    virtual_photon.Print();
 
-    TLorentzVector nucleon(0,0,0,kProtonMass);
-    cout << "nucleon before "  << endl;
-    nucleon.Print();
-    cout << nucleon.M() << endl;
     // rotation 1
-
     Double_t Egamma = virtual_photon.E();
     Double_t angle1 = - atan2((*epy),(*epx));    
     virtual_photon.RotateZ(angle1);
-    nucleon.RotateZ(angle1);
 
     // rotation 2
     double numer = virtual_photon.Z();
@@ -588,33 +566,17 @@ void ridge(TString mode = "", TString target = "")
     Double_t angle2;
     angle2 = acos(numer/denom);
     virtual_photon.RotateY(angle2);
-    nucleon.RotateY(angle2);
     
     // boost
     Double_t boost  = virtual_photon.P()/(Egamma+kProtonMass);
     virtual_photon.Boost(0,0,-boost);
-    nucleon.Boost(0,0,-boost);
-    
-    cout << "virtual photon after "  << endl;
-    virtual_photon.Print();
-    cout << "nucleon after "  << endl;
-    nucleon.Print();
 
-    cout << Form("angle 1 %.5f, angle 2 %.5f, boost %.5f",angle1,angle2,boost) << endl;
 
     //////////////////////////////
     // rotation and boost for pions
     for ( int i = 0; i < triggers4v.size(); i++ ) {
-      cout << "pion before" << endl;
-      triggers4v[i].Print();
-      cout << triggers4v[i].M() << endl;
       TLorentzVector aux_rotation;
-      TLorentzVector alt_rotation;
       aux_rotation = VirtualFrame(triggers4v[i],angle1,angle2,0);
-      
-
-      //cout << "pion rotated " << endl;
-      //aux_rotation.Print();
       triggers4v_rotated.push_back(aux_rotation);
       TLorentzVector aux_boost;
       aux_boost = VirtualFrame(triggers4v[i],angle1,angle2,-boost);
@@ -625,20 +587,26 @@ void ridge(TString mode = "", TString target = "")
       z_w1.push_back(aux_boost.Z());
       theboo_w1.push_back(aux_boost.Theta()*180./TMath::Pi());
       phiboo_w1.push_back(aux_boost.Phi()*180./TMath::Pi());
-      eta_w1.push_back(0.5* log((triggers4v[i].E()+triggers4v[i].Z()) / (triggers4v[i].E()-triggers4v[i].Z())) );
-      
-      cout << "pion after" << endl;
-      triggers4v_boosted[i].Print();
-      triggers4v[i].RotateZ(angle1);
-      triggers4v[i].Print();
-      triggers4v[i].RotateY(angle2);
-      triggers4v[i].Print();
-      triggers4v[i].Boost(0,0,-boost);
-      triggers4v[i].Print();
-      
+      rap_w1.push_back(0.5* log((aux_boost.E()+aux_boost.Z()) / (aux_boost.E()-aux_boost.Z())) );
+      Pt_w1.push_back(sqrt(aux_boost.X()*aux_boost.X()+aux_boost.Y()*aux_boost.Y()));
     }
-    if ( events > 7 ) 
+
+    /*
+    if ( events > 10 && events < 1000 ) {
+      for ( int i = 0; i < triggers_index.size(); i++ ) {
+	cout << "old " << pt[i] << endl;
+      }
+
+      for ( int i = 0; i < triggers4v.size(); i++ ) {
+	cout << "new " << Pt_w1[i] << endl;
+      }
+      cout <<  "----" << endl;
+    }
+    if ( events > 1000 ) {
       break;
+    }
+    */
+
     for ( int i = 0; i < partners4v.size(); i++ ) {
       TLorentzVector aux_rotation;
       aux_rotation = VirtualFrame(partners4v[i],angle1,angle2,0);
@@ -652,7 +620,8 @@ void ridge(TString mode = "", TString target = "")
       z_w2.push_back(aux_boost.Z());
       theboo_w2.push_back(aux_boost.Theta()*180./TMath::Pi());
       phiboo_w2.push_back(aux_boost.Phi()*180./TMath::Pi());
-      eta_w2.push_back(0.5* log((partners4v[i].E()+partners4v[i].Z()) / (partners4v[i].E()-partners4v[i].Z())) );
+      rap_w2.push_back(0.5* log((aux_boost.E()+aux_boost.Z()) / (aux_boost.E()-aux_boost.Z())) );
+      Pt_w2.push_back(sqrt(aux_boost.X()*aux_boost.X()+aux_boost.Y()*aux_boost.Y()));
     }
     triggers_tree.Fill();
     partners_tree.Fill();
@@ -672,11 +641,7 @@ void ridge(TString mode = "", TString target = "")
       y_w3.push_back(aux_boost.Y());
       z_w3.push_back(aux_boost.Z());
     }
-    /*
-    if ( processed_events != 0 ) {
-      old_evnt_tree.Fill();
-    }
-    */
+    
     Zh_w3.clear(); pid_w3.clear(); e_w3.clear(); x_w3.clear(); y_w3.clear(); z_w3.clear();
     for ( auto k : partners_index ) {
       Zh_w3.push_back(Zh[k]);
@@ -686,65 +651,11 @@ void ridge(TString mode = "", TString target = "")
 
 
     
-    // debug
-    if ( m_debug ) {
-      cout << "---------------------------------------------------------------" << endl;
-      cout << "pospions: " << triggers_index.size() << endl;
-      for ( int i = 0; i < triggers_index.size(); i++ ) {
-	cout << "pz: " << pz[triggers_index[i]] << endl;
-	cout << "theta: " << Theta[triggers_index[i]] << endl;
-	cout << "phi: " << Phi[triggers_index[i]] << endl;
-	cout << "thetapq: " << ThetaPQ[triggers_index[i]] << endl;
-	cout << "phipq: " << PhiPQ[triggers_index[i]] << endl;
-	cout << "-------------" << endl;
-      }
-      
-      cout << "4v: " << triggers4v.size() << endl;
-      for ( int i = 0; i < triggers4v.size(); i++ ) {
-	cout << "-----------------------------" << endl;
-	cout << "pz: " << triggers4v[i].Pz() << endl;
-	cout << "theta: " << triggers4v[i].Theta()*180./TMath::Pi() << endl;
-	cout << "phi: " << triggers4v[i].Phi()*180./TMath::Pi() << endl;
-	cout << "-------------" << endl;
-	cout << "pz rot: " << triggers4v_rotated[i].Pz() << endl;
-	cout << "theta rot: " << triggers4v_rotated[i].Theta()*180./TMath::Pi() << endl;
-	cout << "phi rot: " << triggers4v_rotated[i].Phi()*180./TMath::Pi() << endl;
-	cout << "-------------" << endl;
-	cout << "pz boo: " << triggers4v_boosted[i].Pz() << endl;
-	cout << "theta boo: " << triggers4v_boosted[i].Theta()*180./TMath::Pi() << endl;
-	cout << "phi boo: " << triggers4v_boosted[i].Phi()*180./TMath::Pi()<< endl;
-      }
-    }
-    
     
     if ( m_debug )
       cout << "DEBUG: Entering mutli event filling" << endl;
 
 
-    ///////////////////////////
-    // multi event filling
-    // all possible combinations, i.e. all pi+ are triggers in pm mode
-    if ( old4v.size() != 0 && !old_triggers && events > 1 ) {
-      
-      for ( int i = 0; i < triggers4v.size(); i++ ) {
-	for ( int j = 0; j < old4v.size(); j++ ) {
-	  Float_t x,y;
-
-	  x = DeltaAngleRad(triggers4v[i].Phi(),old4v[j].Phi());
-	  y = DeltaAngleRad(triggers4v[i].Theta(),old4v[j].Theta());
-	  corr_ang->FillMulti(x,y);
-
-	  x = DeltaAngleRad(triggers4v_rotated[i].Phi(),old4v_rotated[j].Phi());
-	  y = DeltaAngleRad(triggers4v_rotated[i].Theta(),old4v_rotated[j].Theta());
-	  corr_apq->FillMulti(x,y);
-	  
-	  x = DeltaAngleRad(triggers4v_boosted[i].Phi(),old4v_boosted[j].Phi());
-	  y = DeltaAngleRad(triggers4v_boosted[i].Theta(),old4v_boosted[j].Theta());
-	  corr_boo->FillMulti(x,y);
-	}
-      }
-    }
-    
 
     old4v.clear();
     old4v_rotated.clear();
@@ -755,52 +666,6 @@ void ridge(TString mode = "", TString target = "")
     // SAME EVENT FILLING
     bool fill_neg = true;
     
-    ////////////////////////////////////
-    /// SAME EVENT FILLING
-
-    for ( int i = 0; i < triggers4v.size(); i++ ) {
-      // Reconstructed pions saving
-      corr_ang->FillReco(triggers4v[i].Phi()*180./TMath::Pi(), triggers4v[i].Theta()*180./TMath::Pi());
-      corr_apq->FillReco(triggers4v_rotated[i].Phi()*180./TMath::Pi(), triggers4v_rotated[i].Theta()*180./TMath::Pi() );
-      corr_boo->FillReco(triggers4v_boosted[i].Phi()*180./TMath::Pi(), triggers4v_boosted[i].Theta()*180./TMath::Pi() );
-
-      corr_ang->FillRecoTriggers(triggers4v[i].Phi()*180./TMath::Pi(), triggers4v[i].Theta()*180./TMath::Pi());
-      corr_apq->FillRecoTriggers(triggers4v_rotated[i].Phi()*180./TMath::Pi(), triggers4v_rotated[i].Theta()*180./TMath::Pi() );
-      corr_boo->FillRecoTriggers(triggers4v_boosted[i].Phi()*180./TMath::Pi(), triggers4v_boosted[i].Theta()*180./TMath::Pi() );
-      for ( int j = 0; j < partners4v.size(); j++ ) {
-	// removes correlation to itself
-	if ( partners4v[j] == triggers4v[i] ) {
-	  continue;
-	}
-	float x,y;
-
-	// Correlations filling
-	x = DeltaAngleRad(triggers4v[i].Phi(),partners4v[j].Phi());
-	y = DeltaAngleRad(triggers4v[i].Theta(),partners4v[j].Theta());
-	corr_ang->FillSame(x,y);
-
-	x = DeltaAngleRad(triggers4v_rotated[i].Phi(),partners4v_rotated[j].Phi());
-	y = DeltaAngleRad(triggers4v_rotated[i].Theta(),partners4v_rotated[j].Theta());	
-	corr_apq->FillSame(x,y);
-	
-	x = DeltaAngleRad(triggers4v_boosted[i].Phi(),partners4v_boosted[j].Phi());
-	y = DeltaAngleRad(triggers4v_boosted[i].Theta(),partners4v_boosted[j].Theta());
-	corr_boo->FillSame(x,y);
-
-	// Should enter this loop only once per event (when i == 0 and loop once over j)
-	if ( fill_neg ) {
-	  // Reconstructed pions saving
-	  corr_ang->FillReco(triggers4v[j].Phi()*180./TMath::Pi(), triggers4v[j].Theta()*180./TMath::Pi());
-	  corr_apq->FillReco(triggers4v_rotated[j].Phi()*180./TMath::Pi(), triggers4v_rotated[j].Theta()*180./TMath::Pi() );
-	  corr_boo->FillReco(triggers4v_boosted[j].Phi()*180./TMath::Pi(), triggers4v_boosted[j].Theta()*180./TMath::Pi() );
-
-	  corr_ang->FillRecoPartners(triggers4v[j].Phi()*180./TMath::Pi(), triggers4v[j].Theta()*180./TMath::Pi());
-	  corr_apq->FillRecoPartners(triggers4v_rotated[j].Phi()*180./TMath::Pi(), triggers4v_rotated[j].Theta()*180./TMath::Pi() );
-	  corr_boo->FillRecoPartners(triggers4v_boosted[j].Phi()*180./TMath::Pi(), triggers4v_boosted[j].Theta()*180./TMath::Pi() );
-	}
-      }
-      fill_neg = false;
-    }
 
     //////////////////////////////////////
     // Old pion saving
@@ -814,50 +679,15 @@ void ridge(TString mode = "", TString target = "")
     }
 
 
-    // Color correlation filling
-    for ( TLorentzVector i : triggers4v ) {
-      for ( TLorentzVector j: partners4v ) {
-	if ( i == j ) continue;
-	h15->Fill(*eq2,(i-j).P());
-	h16->Fill(*eq2,(i+j).P());
-      }
-    }
-    for ( TLorentzVector i : triggers4v_rotated ) {
-      for ( TLorentzVector j: partners4v_rotated ) {
-	if ( i == j ) continue;
-	h151->Fill(*eq2,(i-j).P());
-	h161->Fill(*eq2,(i+j).P());
-      }
-    }
-    double p_sum2 = 0;
-    double E_sum2 = 0;
-    bool parn = true;
-    for ( TLorentzVector i : triggers4v_boosted ) {
-      p_sum2 += i.P();
-      E_sum2 += sqrt(i.P()*i.P() + kChargedPionMass*kChargedPionMass);
-      
-      for ( TLorentzVector j: partners4v_boosted ) {
-	if ( i == j ) continue;
-	if ( parn ) {
-	  p_sum2 += j.P();
-	  E_sum2 += sqrt(j.P()*j.P() + kChargedPionMass*kChargedPionMass);
-	}
-	parn = false;
-	h152->Fill(*eq2,(i-j).P());
-	h162->Fill(*eq2,(i+j).P());
-      }
-    }
-    mom_sum2->Fill(p_sum2);
-    energy_sum2->Fill(E_sum2);
-    NTriggers += triggers_index.size();
+    paired_triggers += triggers_index.size();
     //    if ( triggers_index.size() < 1 )
     //cout << "what " << triggers_index.size() << endl;
     processed_events++;
   }
-  return;
+
   cout << "ran through this many events: " << events << endl;
   cout << "processed this many events: " << processed_events << endl;
-  cout << "number of trigger particles: " << NTriggers << endl;
+  cout << "number of trigger particles: " << paired_triggers << endl;
   //side_by_side(ns,ns_vir,"NS_lab_virtual.png");
 
   TString multi_method;
@@ -866,133 +696,20 @@ void ridge(TString mode = "", TString target = "")
   else if ( !old_triggers )
     multi_method = "_pastPartners";
 
-  //corr_apq->NormalizeSame(NTriggers);
-  //corr_apq->NormalizeMulti();
-
-  // FillCorrelation generates the "ridge like" 2D histograms
-  corr_ang->FillCorrelation();
-  corr_apq->FillCorrelation();
-  corr_boo->FillCorrelation();
-
-  // This draws the 2D plots (saves to disk)
-  full_ridge_plots(corr_ang);
-  full_ridge_plots(corr_apq);
-  full_ridge_plots(corr_boo);
-
-  // This draws the 1D plots (saves to disk)
-  full_1d_plots(corr_ang);
-  full_1d_plots(corr_apq);
-  full_1d_plots(corr_boo);
-
-  // Reconstructed pions plots
-  // initialization of arbitrary TH2Fs to get from corr_*
-  TH2F * reco1 = new TH2F("reco1","test",10,0,10,10,0,10);
-  TH2F * reco2 = new TH2F("reco2","test",10,0,10,10,0,10);
-  TH2F * reco3 = new TH2F("reco3","test",10,0,10,10,0,10);
-  *reco1 = corr_apq->GetReco();
-  *reco2 = corr_apq->GetRecoTriggers();
-  *reco3 = corr_apq->GetRecoPartners();
-
-  new TCanvas();
-  reco1->Draw("colz");
-  new TCanvas();
-  reco2->Draw("colz");
-  new TCanvas();
-  reco3->Draw("colz");
-
-  TString con = "1D_reco_pm_";
-  export_hist(reco1, out_path+con+".png");
-  con = "1D_reco_p_";
-  export_hist(reco2, out_path+con+".png");
-  con = "1D_reco_m_";
-  export_hist(reco3, out_path+con+".png");
-  /*
-  new TCanvas();
-  corr_apq->GetReco().Draw("colz");
-  new TCanvas();
-  corr_apq->GetRecoTriggers().Draw("colz");
-  new TCanvas();
-  corr_apq->GetRecoPartners().Draw("colz");
-  */
-  /*
-  export_hist(corr_ang->GetCorr1D(1), out_path+"1D_"+corr_ang->GetVar(1)+".png");
-  export_hist(corr_ang->GetCorr1D(2), out_path+"1D_"+corr_ang->GetVar(2)+".png");
-  export_hist(corr_apq->GetCorr1D(1), out_path+"1D_"+corr_apq->GetVar(1)+".png");
-  export_hist(corr_apq->GetCorr1D(2), out_path+"1D_"+corr_apq->GetVar(2)+".png");
-  export_hist(corr_boo->GetCorr1D(1), out_path+"1D_"+corr_boo->GetVar(1)+".png");
-  export_hist(corr_boo->GetCorr1D(2), out_path+"1D_"+corr_boo->GetVar(2)+".png");
-  */
-  //full_ridge_plots(corr_eta);
-
   triggers_tree.Write();
   partners_tree.Write();
   //old_evnt_tree.Write();
+  TTree Normalization("Metadata","Miscelaneous data which might be helpful for the analysis");
+  Normalization.Branch("total_triggers",&total_triggers);
+  Normalization.Branch("paired_triggers",&paired_triggers);
+  Normalization.Branch("data_cap",&gDataCap);
+  Normalization.Branch("target",&target);
+  Normalization.Branch("trigger_mode",&gMode);
+  Normalization.Fill();
+  Normalization.Write();
 
+  
   out_tree.Close();
-
-
-
-  // saving of 1d 2pc dataroo
-  TFile *fout1 = new TFile("/home/luciano/Physics/CLAS/pion_correlation/"+gMode+"_"+target+".root","recreate");
-  corr_boo->GetCorr1D(1).Write();
-  corr_boo->GetCorr1D(2).Write();
-  //fout1->Close();
-
-  
-  // saving of color entanglement th2 histograms
-  TFile *fout2 = new TFile("/home/luciano/Physics/CLAS/color_entanglement/"+gMode+"_"+target+".root","recreate");
-  h152->Write();
-  h162->Write();
-  fout2->Close();
-  
-  // Color entanglement plotting
-  new TCanvas();
-  h152->Draw("colz");
-  new TCanvas();
-  h162->Draw("colz");
-  new TCanvas();
-  h151->Draw("colz");
-  new TCanvas();
-  h161->Draw("colz");
-  new TCanvas();
-  h15->Draw("colz");
-  new TCanvas();
-  h16->Draw("colz");
-  new TCanvas();
-  mom_sum->Draw();
-  new TCanvas();
-  mom_sum2->Draw();
-  new TCanvas();
-  energy_sum->Draw();
-  new TCanvas();
-  energy_sum2->Draw();
-
-
-  TString outdir_color = "/home/luciano/Physics/CLAS/color_entanglement/";
-  
-  for ( int j = 0; j < 30; j+=5 ){
-    double low = (3.0/30.0)*(j+0.0);
-    double high = (3.0/30.0)*(j+4.0);
-    TString title = Form("%.1f #leq P_{diff} [GeV] #leq %.1f",low, high);
-    TH1*  hproj = h152->ProjectionX(title,j, j+4);
-    hproj->SetFillColor(kBlue);
-    TString export_name = Form("bins_%ito%i",j,j+4);
-    TString export_path = outdir_color+gMode+"_dif_"+export_name+".png";
-    export_hist(hproj,export_path);
-    delete hproj;
-  }
-  for ( int j = 0; j < 30; j+=5 ){
-    double low = (3.0/30.0)*(j+0.0);
-    double high = (3.0/30.0)*(j+4.0);
-    TString title = Form("%.1f #leq P_{diff} [GeV] #leq %.1f",low, high);
-    TH1*  hproj = h162->ProjectionX(title,j, j+4);
-    hproj->SetFillColor(kBlue);
-    TString export_name = Form("bins_%ito%i",j,j+4);
-    TString export_path = outdir_color+gMode+"_sum_"+export_name+".png";
-    export_hist(hproj,export_path);
-    delete hproj;
-  }
-  
 
   cout << "finished correctly" << endl;
 } // END MAIN

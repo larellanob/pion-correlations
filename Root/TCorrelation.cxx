@@ -19,14 +19,25 @@ private:
   TString fVar1;
   TString fVar2;
   TString fTarget;
+
+  // binsx: phi (-180,180)
+  // binsy: y (-3,4), theta (0,180)
+  // binsdeltax: dphi (0,180)
+  // binsdeltay: dy (), dtheta (0,180)
   int fNbinsx = 32;
   int fNbinsy = fNbinsx;
-  //double nedgex = TMath::Pi()*1.0;
-  double fBinMaxX = 190.;
-  double fBinMinX = -10;
-  //double nedgey = TMath::Pi()*2.5;
+  double fBinMaxX = 180.;
+  double fBinMinX = -180;
   double fBinMaxY = 180.;
-  double fBinMinY = -180.;
+  double fBinMinY = 0.;
+  //int fNbinsDeltax = 32;
+  int fNbinsDeltax = 16;
+  int fNbinsDeltay = fNbinsDeltax;
+  double fBinMaxDeltaX = 180.;
+  double fBinMinDeltaX = 0;
+  double fBinMaxDeltaY = 180.;
+  double fBinMinDeltaY = -20;
+  
 public:
   TCorrelation(TString, TString, TString);
   TH2F GetSE()   { return fSameEvent2D;   }
@@ -83,14 +94,12 @@ public:
   }
   void FillCorrelation();
   void SetBins2D(Float_t, Float_t, Float_t, Float_t, Float_t, Float_t);
-  void NormalizeSame(Double_t);
-  void NormalizeMulti();
   Double_t GetSameIntegral() { return fSameEvent2D.Integral();}
   Double_t GetCorrIntegral() { return fCorrelation2D.Integral();}
   Double_t GetRealCorrIntegral() {
     double retorno = 0;
-    for ( int x = 0; x < fNbinsx+1; x++ ) {
-      for ( int y = 0; y < fNbinsy+1; y++ ) {
+    for ( int x = 0; x < fNbinsDeltax+1; x++ ) {
+      for ( int y = 0; y < fNbinsDeltay+1; y++ ) {
 	retorno += fCorrelation2D.GetBinContent(x,y);
       }
     }
@@ -103,32 +112,45 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
 {
   fVar1 = var1;
   fVar2 = var2;
+  if ( var1 == "y" ) {
+    fBinMaxX = 4.;
+    fBinMinX = -3;
+    fBinMinDeltaX = -3;
+    fBinMaxDeltaX = 3;
+  }
+  if ( var2 == "y" ) {
+    fBinMaxY = 4.;
+    fBinMinY = -3;
+    fBinMinDeltaY = -3;
+    fBinMaxDeltaY = 3;
+  }
+  
   fTarget = target;
   TH2F ns("ns_"+var1+"_"+var2+"_"+target,
 	  "N_{s}(#Delta#"+var1+", #Delta#"+var2+");#Delta#"+var1+";#Delta#"+var2,
-	  fNbinsx,fBinMinX,fBinMaxX,
-	  fNbinsy,fBinMinY,fBinMaxY
+	  fNbinsDeltax,fBinMinDeltaX,fBinMaxDeltaX,
+	  fNbinsDeltay,fBinMinDeltaY,fBinMaxDeltaY
 	  );
   TH2F nm("nm_"+var1+"_"+var2+"_"+target,
 	  "N_{m}(#Delta#"+var1+", #Delta#"+var2+");#Delta#"+var1+";#Delta#"+var2,
-	  fNbinsx,fBinMinX,fBinMaxX,
-	  fNbinsy,fBinMinY,fBinMaxY
+	  fNbinsDeltax,fBinMinDeltaX,fBinMaxDeltaX,
+	  fNbinsDeltay,fBinMinDeltaY,fBinMaxDeltaY
 	  );
   TH1F ns11("ns_"+var1+"_"+target,
 	    "N_{s}(#Delta#"+var1+");#Delta#"+var1,
-	    fNbinsx,fBinMinX,fBinMaxX
+	    fNbinsDeltax,fBinMinDeltaX,fBinMaxDeltaX
 	    );
   TH1F ns12("ns_"+var2+"_"+target,
 	    "N_{s}(#Delta#"+var2+");#Delta#"+var2,
-	    fNbinsy,fBinMinY,fBinMaxY
+	    fNbinsDeltay,fBinMinDeltaY,fBinMaxDeltaY
 	    );
   TH1F nm11("nm_"+var1+"_"+target,
 	    "N_{m}(#Delta#"+var1+");#Delta#"+var1,
-	    fNbinsx,fBinMinX,fBinMaxX
+	    fNbinsDeltax,fBinMinDeltaX,fBinMaxDeltaX
 	    );
   TH1F nm12("nm_"+var2+"_"+target,
 	    "N_{m}(#Delta#"+var2+");#Delta#"+var2,
-	    fNbinsy,fBinMinY,fBinMaxY
+	    fNbinsDeltay,fBinMinDeltaY,fBinMaxDeltaY
 	    );
   fSameEvent2D  = ns;
   fMultiEvent2D = nm;
@@ -138,16 +160,15 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
   fMultiEvent1D2 = nm12;
 
   // reco
-
   TH2F reco1("reco_trig_partner_"+var1+"_"+var2+"_"+target,
-	     "reconstructed #pi^{#pm};#Delta#"+var1+";#Delta#"+var2,
-	     72,-180,180,36,0,180);
+	     "reconstructed triggers + partners;#"+var1+";#"+var2,
+	     fNbinsx,fBinMinX,fBinMaxX,fNbinsy,fBinMinY,fBinMaxY);
   TH2F reco2("reco_trig_"+var1+"_"+var2+"_"+target,
-	     "reconstructed #pi^{+};#Delta#"+var1+";#Delta#"+var2,
-	     72,-180,180,36,0,180);
+	     "reconstructed triggers;#"+var1+";#"+var2,
+	     fNbinsx,fBinMinX,fBinMaxX,fNbinsy,fBinMinY,fBinMaxY);
   TH2F reco3("reco_partner_"+var1+"_"+var2+"_"+target,
-	     "reconstructed #pi^{-};#Delta#"+var1+";#Delta#"+var2,
-	     72,-180,180,36,0,180);
+	     "reconstructed partners;#"+var1+";#"+var2,
+	     fNbinsx,fBinMinX,fBinMaxX,fNbinsy,fBinMinY,fBinMaxY);
   fReco = reco1;
   fRecoTriggers = reco2;
   fRecoPartners = reco3;
@@ -157,62 +178,72 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
 void TCorrelation::FillCorrelation()
 {
   TH2F ndiv("nc_"+fVar1+"_"+fVar2+"_"+fTarget,
-	    "N_{s}/N_{m}(#Delta#"+fVar1+", #Delta#"+fVar2+");#Delta#"+fVar1+";#Delta#"+fVar2,
-	    fNbinsx,fBinMinX,fBinMaxX,
-	    fNbinsy,fBinMinY,fBinMaxY);
-  /*
-  TH1F ndiv1d1("nc_"+fVar1,
-	       "N_{s}/N_{m}(#Delta#"+fVar1+");#Delta#"+fVar1,
-	       fNbinsy,fBinMinY,fBinMaxY);
-  TH1F ndiv1d2("nc_"+fVar2,
-	       "N_{s}/N_{m}(#Delta#"+fVar2+");#Delta#"+fVar2,
-	       fNbinsx,fBinMinX,fBinMaxX);
-  */
+	    "N_{s1}/N_{m}(#Delta#"+fVar1+", #Delta#"+fVar2+");#Delta#"+fVar1+";#Delta#"+fVar2,
+	    fNbinsDeltax,fBinMinDeltaX,fBinMaxDeltaX,
+	    fNbinsDeltay,fBinMinDeltaY,fBinMaxDeltaY);
+
   float ratio;
   float settle_at = 1.0;
-  for ( int x = 1; x < fNbinsx+1; x++ ) {
-    for ( int y = 1; y < fNbinsy+1; y++ ) {
+  double error1;
+  for ( int x = 1; x < fNbinsDeltax+1; x++ ) {
+    double bcx = (ndiv.GetXaxis()->GetBinCenter(x));
+    for ( int y = 1; y < fNbinsDeltay+1; y++ ) {
+      double bcy = (ndiv.GetYaxis()->GetBinCenter(y));
       float nsvalue = fSameEvent2D.GetBinContent(x,y);
       float nmvalue = fMultiEvent2D.GetBinContent(x,y);
       if ( nsvalue < 5.0 || nmvalue < 5.0 ) {
-	ndiv.SetBinContent(x,y,settle_at);
+	//ndiv.SetBinContent(x,y,settle_at);
+	ndiv.Fill(bcx,bcy,settle_at);
       } else {
-	ndiv.SetBinContent(x,y,nsvalue/nmvalue);
+	//ndiv.SetBinContent(x,y,nsvalue/nmvalue);
+	ndiv.Fill(bcx,bcy,nsvalue/nmvalue);
       }
+      if ( nmvalue != 0 && nsvalue != 0) {
+	error1 = (nsvalue/nmvalue)*sqrt( (1./nsvalue) + (1./nmvalue) );
+	ndiv.SetBinError(x,y,error1);
+      }
+
     }
   }
 
   // 1 d histograms
   double num;
   double denom;
+  double error;
   
   TH1F h1 = fSameEvent1D1;
-  for ( int i = 0; i < fNbinsx; i++ ) {
+  h1.Reset();
+  double h1norm = fMultiEvent1D1.GetBinContent(fMultiEvent1D1.GetMaximumBin());
+  for ( int i = 0; i < fNbinsDeltax; i++ ) {
     num   = 0;
     denom = 0;
     num   = fSameEvent1D1.GetBinContent(i);
     denom = fMultiEvent1D1.GetBinContent(i);
-    if ( denom != 0 ) {
+    if ( denom != 0 && num > 50 && denom > 50 ) {
       h1.Fill(fSameEvent1D1.GetBinCenter(i),
 	      (num/denom));
+      error = (num/denom)*sqrt( (1./num) + (1./denom)  );
+      h1.SetBinError(i,error);
     }
   }
-  h1.Scale(1./h1.Integral());
-  h1.SetNameTitle("nc_"+fVar1+"_"+fTarget,"N_{s}/N_{m}(#Delta#"+fVar1+");#Delta#"+fVar1);
+  h1.SetNameTitle("nc_"+fVar1+"_"+fTarget,"N_{s2}/N_{m}(#Delta#"+fVar1+");#Delta#"+fVar1);
   
   TH1F h2 = fSameEvent1D2;
-  for ( int i = 0; i < fNbinsy; i++ ) {
+  h2.Reset();
+  double h2norm = fMultiEvent1D2.GetBinContent(fMultiEvent1D2.GetMaximumBin());
+  for ( int i = 0; i < fNbinsDeltay; i++ ) {
     num   = 0;
     denom = 0;
     num   = fSameEvent1D2.GetBinContent(i);
     denom = fMultiEvent1D2.GetBinContent(i);
-    if ( denom != 0 ) {
+    if ( denom != 0 && num > 50 && denom > 50 ) {
       h2.Fill(fSameEvent1D2.GetBinCenter(i),
 	      (num/denom));
+      error = (num/denom)*sqrt( (1./num) + (1./denom)  );
+      h2.SetBinError(i,error);
     }
   }
-  h2.Scale(1./h2.Integral());
-  h2.SetNameTitle("nc_"+fVar2+"_"+fTarget,"N_{s}/N_{m}(#Delta#"+fVar2+");#Delta#"+fVar2);
+  h2.SetNameTitle("nc_"+fVar2+"_"+fTarget,"N_{s3}/N_{m}(#Delta#"+fVar2+");#Delta#"+fVar2);
   
   fCorrelation1D1 = h1;
   fCorrelation1D2 = h2;
@@ -231,25 +262,3 @@ void TCorrelation::SetBins2D(Float_t nbinsx, Float_t binminx, Float_t binmaxx,
   fBinMinY = binminy;
 }
 
-
-void TCorrelation::NormalizeSame(Double_t N)
-{
-  for ( Int_t x = 0; x < fNbinsx; x++ ) {
-    for ( Int_t y = 0; y < fNbinsy; y++ ) {
-      Double_t content = fSameEvent2D.GetBinContent(x,y);
-      fSameEvent2D.SetBinContent(x,y,content/N);
-    }
-  }
-}
-
-void TCorrelation::NormalizeMulti()
-{
-  Double_t N = fMultiEvent2D.GetMaximum();
-  for ( Int_t x = 0; x < fNbinsx; x++ ) {
-    for ( Int_t y = 0; y < fNbinsy; y++ ) {
-      Double_t content = fMultiEvent2D.GetBinContent(x,y);
-      fMultiEvent2D.SetBinContent(x,y,content/N);
-      //fMultiEvent2D.GetBin(x,y) *= (1/N);
-    }
-  }
-}
