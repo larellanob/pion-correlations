@@ -12,8 +12,8 @@
 #include "Root/TCorrelation.cxx"
 #include "Root/DeltaAngleRad.cxx"
 
-bool m_debug      = false;
-bool m_simulation = false;
+bool m_debug      = true;
+bool m_simulation = true;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
 Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
@@ -183,6 +183,8 @@ void tpc_file_generator(TString mode = "", TString target = "")
     out_tree.Open("/home/luciano/Physics/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
   } else {
     out_tree.Open("/eos/user/a/arellano/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+    if ( m_debug) {
+      cout << "DEBUG: recreated tpc file" << endl;
   }
   
   TTree triggers_tree("triggers","trigger particles");
@@ -276,6 +278,11 @@ void tpc_file_generator(TString mode = "", TString target = "")
   ///////////////////////////
   //// LOOP ////////////
   ///////////////////////////
+  if ( m_debug ) {
+    cout << "DEBUG: entering main loop" << endl;
+    cout << Form("DEBUG: datacap %.1f, entries %i ", gDataCap, Entries) << endl;
+  }
+		
   while ( th.Next()  && events < (gDataCap * Entries) ) {
     e.Next();
     events++;
