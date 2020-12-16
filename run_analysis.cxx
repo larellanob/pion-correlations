@@ -5,11 +5,16 @@
 void export_hist(TH1 * h2, TString out_filename);
 void recoplots(TCorrelation *t, TString target, TString gMode, TString var);
 TString gDirName = "/home/luciano/Physics/CLAS/pion_correlation/";
+bool m_simulation = true;
 
 //void run_analysis( TString filename = "/home/luciano/Physics/CLAS/pion_ridge/data/2pcPairs_D_zhpm.root" )
 
-void run_analysis( TString centroid_s = "",TString target = "D", TString gMode = "ptlead")
+void run_analysis( TString centroid_s = "",TString target = "C", TString gMode = "zhpm")
 {
+  if ( m_simulation ) {
+    cout << "running in simulation mode!" << endl;
+    gDirName=gDirName+"simulations/";
+  }
   TString filename = gDirName+"2pcPairs/2pcPairs_"+target+"_"+gMode+".root";
   if ( filename == "" ) {
     cout << "Please input some filename to analyze" << endl;
@@ -269,6 +274,5 @@ void recoplots(TCorrelation * t, TString target, TString gMode, TString var) {
   export_hist(reco2, gDirName+"/plots_reco/"+con+target+"_"+gMode+"_"+var+".png");
   con = "1D_reco_m_";
   export_hist(reco3, gDirName+"/plots_reco/"+con+target+"_"+gMode+"_"+var+".png");
-  
   
 }

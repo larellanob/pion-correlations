@@ -92,7 +92,9 @@ void tpc_file_generator(TString mode = "", TString target = "")
   }
   if ( target == "D" ) {
     DMode = true;
-    gDataCap *= 0.5;
+    if ( !m_simulation ) {
+      gDataCap *= 0.5;
+    }
     ch.Add("/home/luciano/Physics/CLAS/data/full_Pb_files.root");
     ch.Add("/home/luciano/Physics/CLAS/data/full_Fe_files.root");
     ch.Add("/home/luciano/Physics/CLAS/data/full_C_files.root");

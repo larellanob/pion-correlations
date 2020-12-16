@@ -1,7 +1,12 @@
 #include "Root/Plotter.cc"
 
+bool m_simulation = true;
+
 void multi_plotter_2pcs()
 {
+  if ( m_simulation ) {
+    cout << "running in simulation mode!" << endl;
+  }
   std::vector <TString> modes =
     {
      //"pp",
@@ -39,6 +44,9 @@ void multi_plotter_2pcs()
     };
   
   TString input_dir = "/home/luciano/Physics/CLAS/pion_correlation/";
+  if ( m_simulation ) {
+    input_dir = input_dir+"simulations/";
+  }
   
   TH1F *h1;
   TH1F *h2;
