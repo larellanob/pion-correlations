@@ -12,7 +12,7 @@
 #include "Root/TCorrelation.cxx"
 #include "Root/DeltaAngleRad.cxx"
 
-bool m_debug      = true;
+bool m_debug      = false;
 bool m_simulation = true;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
@@ -46,7 +46,9 @@ void tpc_file_generator(TString mode = "", TString target = "")
     target = "C";
   }
   //gStyle->SetOptStat(0);
-
+  if ( m_debug ) { 
+    cout << Form("DEBUG: starting file generator with mode %s, target %s ", mode.Data(), target.Data()) << endl;
+  }
 
   // Chain for hadrons (ch) and chain for triggers electrons (ech)
   TChain ch;
@@ -60,18 +62,22 @@ void tpc_file_generator(TString mode = "", TString target = "")
   // Also sets beam energy
   Double_t kEbeam;
   if ( m_simulation ) {
-    if ( target == "Pb" ) {
-      ch.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root/tree_accept");
-      ech.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root");
+    if ( target == "C" ) {
+      ch.Add("/eos/user/a/arellano/CFF/full_C_simulations.root/tree_accept");
+      ech.Add("/eos/user/a/arellano/CFF/full_C_simulations.root");
+      cout << "added C simulation file" << endl;
     } else if ( target == "Fe" ) {
       ch.Add("/eos/user/a/arellano/CFF/full_Fe_simulations.root/tree_accept");
       ech.Add("/eos/user/a/arellano/CFF/full_Fe_simulations.root");
+      cout << "added Fe simulation file" << endl;
     } else if ( target == "Pb" ) {
       ch.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root/tree_accept");
       ech.Add("/eos/user/a/arellano/CFF/full_Pb_simulations.root");
+      cout << "added Pb simulation file" << endl;
     } else if ( target == "D" ) {
       ch.Add("/eos/user/a/arellano/CFF/full_D_simulations.root/tree_accept");
       ech.Add("/eos/user/a/arellano/CFF/full_D_simulations.root");
+      cout << "added D simulation file" << endl;
       DMode = true;
     }
     //kEbeam = 11.0;
@@ -292,6 +298,12 @@ void tpc_file_generator(TString mode = "", TString target = "")
     if ( events % 1000000 == 0 ) {
       cout << events << "/" << gDataCap*Entries << endl;
     }
+
+    // events with zero entries are common for simulations
+    if ( Zh.GetSize() == 0 ) {
+      continue;
+    }
+
 
     //////////////////////////
     // event cuts
