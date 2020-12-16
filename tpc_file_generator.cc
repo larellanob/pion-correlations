@@ -185,6 +185,7 @@ void tpc_file_generator(TString mode = "", TString target = "")
     out_tree.Open("/eos/user/a/arellano/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
     if ( m_debug) {
       cout << "DEBUG: recreated tpc file" << endl;
+    }
   }
   
   TTree triggers_tree("triggers","trigger particles");
