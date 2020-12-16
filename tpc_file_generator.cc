@@ -14,14 +14,6 @@
 
 bool m_debug      = false;
 bool m_simulation = false;
-TString out_path;
-if ( m_simulation ) {
-  out_path = "/eos/user/a/arellano/CLAS/pion_ridge/";
- }
-if ( !m_simulation ) {
-  out_path = "/home/luciano/Physics/CLAS/pion_ridge/";
- }
-
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
 Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
@@ -35,17 +27,6 @@ TDatabasePDG db;
 // zhlluupp: trigger pi+ zh>0.5, assoc pi+ zh in (ll,uu)
 TString gMode = "zhpm"; // choose pm or pp
 
-
-//Float_t PhiPQ(TVector3, TLorentzVector);
-void export_hist(TH2 *, TString, TString options = "colz");
-void export_hist(TH1 * h2, TString out_filename);
-//void export_hist(TH1F, TString, TString options = "");
-void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier = "" );
-void full_ridge_plots(TCorrelation* );
-void full_1d_plots(TCorrelation*);
-void side_by_side(TH2 *,TH2 *, TString);
-Float_t ComputeThetaPQ(TLorentzVector, TLorentzVector);
-Float_t ComputePhiPQ(TLorentzVector, TLorentzVector);
 TLorentzVector VirtualFrame(TLorentzVector, double, double, double);
 Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad);
 
@@ -65,12 +46,8 @@ void tpc_file_generator(TString mode = "", TString target = "")
     target = "C";
   }
   //gStyle->SetOptStat(0);
-  if ( m_simulation == true ) {
-    out_path+="simulation/";
-  } else {
-    out_path += "data/";
-  }
-  
+
+
   // Chain for hadrons (ch) and chain for triggers electrons (ech)
   TChain ch;
   if ( !m_simulation ) {
@@ -718,151 +695,6 @@ void tpc_file_generator(TString mode = "", TString target = "")
 ////////////////////////
 //// FUNCTIONS
 ////////////////////////
-
-Float_t ComputePhiPQ(TLorentzVector pion, TLorentzVector gamma_vir )
-{
-  TVector3 Vhelp(0.,0.,1.0);
-  TLorentzVector gamma = gamma_vir;
-  Double_t phi_z = TMath::Pi()-gamma.Phi();
-  pion.RotateZ(phi_z);
-  gamma.RotateZ(phi_z);  
-  Double_t phi_y = gamma.Angle(Vhelp);
-  pion.RotateY(phi_y);
-  return ( (pion.Phi()*180.)/TMath::Pi() );
-}
-
-
-void export_hist(TH2 * h2, TString out_filename, TString options = "colz") {
-  auto c1 = new TCanvas();
-  c1->SetCanvasSize(800,800);
-  //c1->SetLeftMargin(0.15);
-  c1->SetRightMargin(0.15);
-  h2->Draw(options);
-  c1->SaveAs(out_filename);
-  delete c1;
-}
-
-void export_hist(TH1F h2, TString out_filename, TString options = "") {
-  auto c1 = new TCanvas();
-  c1->SetCanvasSize(800,800);
-  //c1->SetLeftMargin(0.15);
-  c1->SetRightMargin(0.15);
-  h2.Draw(options);
-  c1->SaveAs(out_filename);
-  delete c1;
-}
-
-void export_hist(TH1 * h2, TString out_filename) {
-  auto c1 = new TCanvas();
-  c1->SetCanvasSize(800,600);
-  c1->SetLeftMargin(0.12);
-  c1->SetRightMargin(0.15);
-  h2->Draw();
-
-  c1->SaveAs(out_filename);
-  c1->Modified();
-  c1->Update();
-  delete c1;
-}
-
-
-void ridge_plot(TH2F h2, TString out_name, TString out_path_modifier)
-{
-  TCanvas *c1 = new TCanvas("c1","mi cambas",1000,1000);
-  c1->SetLeftMargin(0.14);
-  h2.Draw("surf1");
-
-  // aesthetics
-  //gStyle->SetOptStat(0);
-  double theta = -30;
-  double phi   = 60;
-  h2.GetXaxis()->CenterTitle(true);
-  h2.GetXaxis()->SetTitleOffset(1.5);
-  h2.GetYaxis()->CenterTitle(true);
-  h2.GetYaxis()->SetTitleOffset(2.0);
-  // main 2d plot 
-  TString out_filename = out_path+out_path_modifier+out_name;
-  c1->SaveAs(out_filename);
-
-  // mountain side plots
-  gPad->GetView()->RotateView(0,90);
-  out_filename = out_path+out_path_modifier+"hillsideY_"+out_name;
-  c1->SaveAs(out_filename);
-  gPad->GetView()->RotateView(-90,90);
-  out_filename = out_path+out_path_modifier+"hillsideX_"+out_name;
-  c1->SaveAs(out_filename);
-
-  // projection plots
-  TH1 * projx = h2.ProjectionX();
-  projx->SetFillColor(kBlue);
-  projx->Draw();
-  out_filename = out_path+out_path_modifier+"projx_"+out_name;
-  c1->SaveAs(out_filename);
-  
-  TH1 * projy = h2.ProjectionY();
-  projy->SetFillColor(kBlue);
-  projy->Draw();
-  out_filename = out_path+out_path_modifier+"projy_"+out_name;
-  c1->SaveAs(out_filename);
-
-  // comment next lines if not running on batch mode I guess
-  delete c1;
-  delete projx;
-  delete projy;
-}
-
-// plots two th2 side by side
-void side_by_side(TH2 *hlab,TH2 *hvir, TString out_filename)
-{
-  TCanvas *c1 = new TCanvas("c1","mi cambas",2400,1000);
-  TString corr;
-  c1->SetFixedAspectRatio();
-  c1->Divide(2,0,0.02,0.02);
-  
-  c1->cd(1);
-  
-  hlab->Draw("surf1");
-  gStyle->SetOptStat(0);
-  // TODO: maybe add text with entry number
-  double theta = -30;
-  double phi   = 60;
-  hlab->GetXaxis()->CenterTitle(true);
-  hlab->GetXaxis()->SetTitleOffset(1.5);
-  hlab->GetYaxis()->CenterTitle(true);
-  gPad->GetView()->RotateView(theta,phi);  
-  
-  c1->cd(2);
-  hvir->Draw("surf1");
-  gStyle->SetOptStat(0);
-  hvir->GetXaxis()->CenterTitle(true);
-  hvir->GetXaxis()->SetTitleOffset(1.5);
-  hvir->GetYaxis()->CenterTitle(true);
-  gPad->GetView()->RotateView(-30,60);  
-
-  out_filename = out_path+out_filename;
-  c1->SaveAs(out_filename);
-  delete c1;
-}
-
-
-void full_ridge_plots(TCorrelation * corr)
-{
-  TString connector = corr->GetVar(1)+"_"+corr->GetVar(2);
-  TString connector2 = connector+"/"+gMode;
-  ridge_plot(corr->GetSE(),"ridge_same_"+connector+".png", connector2);
-  ridge_plot(corr->GetME(),"ridge_multi_"+connector+".png", connector2);
-  ridge_plot(corr->GetCO(),"ridge_correlation_"+connector+".png", connector2);
-}
-
-void full_1d_plots(TCorrelation* corr)
-{
-  for ( int var = 1; var < 3; var++ ) {
-    TString con = "1D_"+gMode+"_"+corr->GetVar(var)+"_";
-    export_hist(corr->GetCorr1D(var), out_path+con+"corr.png");
-    export_hist(corr->GetSame1D(var), out_path+con+"same.png");
-    export_hist(corr->GetMult1D(var), out_path+con+"mult.png");
-  }
-}
 
 TLorentzVector VirtualFrame(TLorentzVector v1,
 			    double angle1, double angle2, double boost)
