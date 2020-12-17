@@ -5,7 +5,7 @@
 void export_hist(TH1 * h2, TString out_filename);
 void recoplots(TCorrelation *t, TString target, TString gMode, TString var);
 TString gDirName = "/home/luciano/Physics/CLAS/pion_correlation/";
-bool m_simulation = true;
+bool m_simulation = false;
 
 //void run_analysis( TString filename = "/home/luciano/Physics/CLAS/pion_ridge/data/2pcPairs_D_zhpm.root" )
 

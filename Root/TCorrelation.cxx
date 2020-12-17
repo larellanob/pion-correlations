@@ -214,7 +214,7 @@ void TCorrelation::FillCorrelation()
   TH1F h1 = fSameEvent1D1;
   h1.Reset();
   double h1norm = fMultiEvent1D1.GetBinContent(fMultiEvent1D1.GetMaximumBin());
-  for ( int i = 0; i < fNbinsDeltax; i++ ) {
+  for ( int i = 1; i < fNbinsDeltax+1; i++ ) {
     num   = 0;
     denom = 0;
     num   = fSameEvent1D1.GetBinContent(i);
@@ -231,7 +231,7 @@ void TCorrelation::FillCorrelation()
   TH1F h2 = fSameEvent1D2;
   h2.Reset();
   double h2norm = fMultiEvent1D2.GetBinContent(fMultiEvent1D2.GetMaximumBin());
-  for ( int i = 0; i < fNbinsDeltay; i++ ) {
+  for ( int i = 1; i < fNbinsDeltay+1; i++ ) {
     num   = 0;
     denom = 0;
     num   = fSameEvent1D2.GetBinContent(i);

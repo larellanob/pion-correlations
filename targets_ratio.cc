@@ -97,15 +97,19 @@ void targets_ratio()
       hCSave->Reset();
 
       cout << "variable " << var << endl;
-      for ( int bin = 0; bin < nbins; bin++ ) {
+      for ( int bin = 1; bin < nbins+1; bin++ ) {
 	double tvalue = 0;
 	double fillvalue = 0;
 	double error = 0;
 	double bincenter = hD.GetXaxis()->GetBinCenter(bin);;
 	double dvalue = hD.GetBinContent(bin);
-	cout << bincenter << endl;
+	double terror, derror;
+	derror = hD.GetBinError(bin);
+	
+	//cout << bincenter << endl;
 
 	tvalue = hFeRead.GetBinContent(bin);
+	terror = hFeRead.GetBinError(bin);
 	if ( dvalue != 0 ) {
 	  fillvalue = tvalue/dvalue;
 	} else {
@@ -113,12 +117,13 @@ void targets_ratio()
 	}
 	hFeSave->Fill(bincenter,fillvalue);
 	if ( tvalue != 0 && dvalue != 0 ) {
-	  error = (dvalue/tvalue)*sqrt( (1./dvalue) + (1./tvalue) );
+	  error = (dvalue/tvalue)*sqrt( (derror*derror)/(dvalue*dvalue) + (terror*terror)/(tvalue*tvalue) );
 	  hFeSave->SetBinError(bin,error);
 	}
-	cout << Form("bin %i targ Fe, (%.6f/%.6f) = %.6f", bin, tvalue, dvalue,fillvalue) << endl;
+	//cout << Form("bin %i targ Fe, (%.6f/%.6f) = %.6f", bin, tvalue, dvalue,fillvalue) << endl;
 	
 	tvalue = hCRead.GetBinContent(bin);
+	terror = hCRead.GetBinError(bin);
 	if ( dvalue != 0 ) {
 	  fillvalue = tvalue/dvalue;
 	} else {
@@ -126,13 +131,14 @@ void targets_ratio()
 	}
 	hCSave->Fill(bincenter,fillvalue);
 	if ( tvalue != 0 && dvalue != 0 ) {
-	  error = (dvalue/tvalue)*sqrt( (1./dvalue) + (1./tvalue) );
+	  error = (dvalue/tvalue)*sqrt( (derror*derror)/(dvalue*dvalue) + (terror*terror)/(tvalue*tvalue) );
 	  hCSave->SetBinError(bin,error);
 	}
-	cout << Form("bin %i targ C, (%.6f/%.6f) = %.6f", bin, tvalue, dvalue,fillvalue) << endl;
+	//cout << Form("bin %i targ C, (%.6f/%.6f) = %.6f", bin, tvalue, dvalue,fillvalue) << endl;
 
 	
 	tvalue = hPbRead.GetBinContent(bin);
+	terror = hPbRead.GetBinError(bin);
 	if ( dvalue != 0 ) {
 	  fillvalue = tvalue/dvalue;
 	} else {
@@ -140,20 +146,43 @@ void targets_ratio()
 	}
 	hPbSave->Fill(bincenter,fillvalue);
 	if ( tvalue != 0 && dvalue != 0 ) {
-	  error = (dvalue/tvalue)*sqrt( (1./dvalue) + (1./tvalue) );
+	  error = (dvalue/tvalue)*sqrt( (derror*derror)/(dvalue*dvalue) + (terror*terror)/(tvalue*tvalue) );
 	  hPbSave->SetBinError(bin,error);
 	}
-	cout << Form("bin %i targ Pb, (%.6f/%.6f) = %.6f, error %.6f", bin, tvalue, dvalue,fillvalue, error) << endl;
+	//cout << Form("bin %i targ Pb, (%.6f/%.6f) = %.6f, error %.6f", bin, tvalue, dvalue,fillvalue, error) << endl;
       }
 	
       //cout << "bINS : " << hC->GetNbinsX() << endl;
       //cout << hPb->GetBinContent(15) << endl;
-      hCSave->Draw("E0X0");
+      //hCSave->Draw("E0X0");
       corr_histos.push_back(hCSave);
-      hFeSave->Draw("E0X0");
+      //hFeSave->Draw("E0X0");
       corr_histos.push_back(hFeSave);
-      hPbSave->Draw("E0X0");
+      //hPbSave->Draw("E0X0");
+
       corr_histos.push_back(hPbSave);
+
+
+      double minrange = 0;
+      double maxrange = 0;
+      minrange = 10000;
+      for ( auto h: corr_histos ) {
+	if ( h->GetMaximum() > maxrange ) {
+	  maxrange = h->GetMaximum();
+	}
+	double minnotzero = 100000;
+	for ( int bin = 1; bin < nbins+1; bin++ ) {
+	  if ( h->GetBinContent(bin) < minnotzero && h->GetBinContent(bin) != 0 ) {
+	    minnotzero = h->GetBinContent(bin);
+	  }
+	}
+	if ( minnotzero < minrange ) {
+	  minrange = minnotzero;
+	}
+      }
+      cout << Form("max %.2f min %.2f",maxrange,minrange ) << endl;
+      hCSave->SetMaximum(maxrange+0.2*maxrange);
+      hCSave->SetMinimum(minrange-0.2*minrange);      
       cout << "HISTOGRAMS " << corr_histos.size() << endl;
       TString out_filename = input_dir+"plots/"+mode+"_"+var+"_Dratio.png";
       RatioPlotter(corr_histos[0],corr_histos[1],corr_histos[2],out_filename);

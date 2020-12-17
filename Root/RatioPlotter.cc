@@ -35,6 +35,10 @@ void RatioPlotter(TH1F * C, TH1F * Fe, TH1F * Pb, TString out_filename = "" )
   Pb->Draw("E0X0 same");
   //D->GetYaxis()->SetTitle("N_{s}/N_{m}(#theta_{PQ})");
 
+  int nbins = C->GetNbinsX();
+  TLine *t = new TLine(C->GetBinLowEdge(1),1,C->GetBinLowEdge(nbins+1),1);
+  t->SetLineStyle(9);
+  t->Draw();
 
   //TString test;
   //test = Form("D ",D->GetEntries());
