@@ -205,7 +205,7 @@ void run_analysis( TString centroid_s = "",TString target = "C", TString gMode =
 
   TCanvas *cinv = new TCanvas();
   h_inv_mass.Draw();
-  cinv->SaveAs(gDirName+"inv_mass_"+gMode+"_"+target+".png");
+  cinv->SaveAs(gDirName+"plots_invmass/inv_mass_"+gMode+"_"+target+".png");
   /*
   TH2F * reco1 = new TH2F("reco1","test",10,0,10,10,0,10);
   TH2F * reco2 = new TH2F("reco2","test",10,0,10,10,0,10);

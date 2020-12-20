@@ -1,6 +1,6 @@
 // Provides plotting capabilities for the 2pc (one dimensional) analysis
 
-void RatioPlotter(TH1F * C, TH1F * Fe, TH1F * Pb, TString out_filename = "" )
+void RatioPlotter(TH1F * C, TH1F * Fe, TH1F * Pb, TString out_filename, bool m_simulation)
 {
   gStyle->SetOptStat(0);
   gStyle->SetOptTitle(0);
@@ -33,24 +33,31 @@ void RatioPlotter(TH1F * C, TH1F * Fe, TH1F * Pb, TString out_filename = "" )
   C->Draw("E0X0");
   Fe->Draw("E0X0 same");
   Pb->Draw("E0X0 same");
-  //D->GetYaxis()->SetTitle("N_{s}/N_{m}(#theta_{PQ})");
+
+  // shows entries
+  //C->SetTitle(TString::Format("C  %.0f",C->GetEntries()));
+  //Pb->SetTitle(TString::Format("Pb  %.0f",Pb->GetEntries()));
+  //Fe->SetTitle(TString::Format("Fe  %.0f",Fe->GetEntries()));
+
+  // doesnt show entries
+  C->SetTitle("C/D");
+  Pb->SetTitle("Pb/D");
+  Fe->SetTitle("Fe/D");
+  
+  C->SetYTitle("N_{c}^{A}/N_{c}^{D}");
+  TLegend *myleg;
+  if ( m_simulation ) {
+    myleg = c1->BuildLegend(0.2,0.7,0.44,0.9,"Hayk's simulation","");
+  } else
+    myleg = c1->BuildLegend(0.2,0.7,0.44,0.9,"eg2 data         ","");
+  
+  myleg->SetFillStyle(0);
 
   int nbins = C->GetNbinsX();
   TLine *t = new TLine(C->GetBinLowEdge(1),1,C->GetBinLowEdge(nbins+1),1);
   t->SetLineStyle(9);
   t->Draw();
 
-  //TString test;
-  //test = Form("D ",D->GetEntries());
-  //D->SetTitle(TString::Format("D  %.0f",D->GetEntries()));
-  C->SetTitle(TString::Format("C  %.0f",C->GetEntries()));
-  Pb->SetTitle(TString::Format("Pb  %.0f",Pb->GetEntries()));
-  Fe->SetTitle(TString::Format("Fe  %.0f",Fe->GetEntries()));
-
-  TLegend *myleg;
-  myleg = c1->BuildLegend(0.2,0.7,0.44,0.9,"Targets / Entries","");
-  
-  myleg->SetFillStyle(0);
 
   if ( out_filename == "" ) {
     c1->SaveAs("out1.png");

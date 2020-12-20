@@ -1,6 +1,6 @@
 #include "Root/RatioPlotter.cc"
 
-bool m_simulation = false;
+bool m_simulation = true;
 
 void targets_ratio()
 {
@@ -15,8 +15,8 @@ void targets_ratio()
      //"pm",
      "ptlead",
      //"zhlead",
-     //"zhpp",
-     //"zhpm",
+     "zhpp",
+     "zhpm",
      /*
      "ppp",
      "zh0002pp",
@@ -67,13 +67,13 @@ void targets_ratio()
     for ( TString var: variables ) {
       corr_histos.clear();
       if ( var == "phiPQboosted" ){
-	axislabel = "#phi";
+	axislabel = "#Delta#phi";
 	f->Open(input_dir+"histograms/alltarg_"+mode+"__boo.root");
       } else if ( var == "y" ) {
-	axislabel = "y";
+	axislabel = "#Delta y";
 	f->Open(input_dir+"histograms/alltarg_"+mode+"__rap.root");
       } else if ( var == "thetaPQboosted" ) {
-	axislabel = "#theta";
+	axislabel = "#Delta #theta";
 	f->Open(input_dir+"histograms/alltarg_"+mode+"__boo.root");
       }
       // deuterium histogram for variable var
@@ -182,10 +182,11 @@ void targets_ratio()
       }
       cout << Form("max %.2f min %.2f",maxrange,minrange ) << endl;
       hCSave->SetMaximum(maxrange+0.2*maxrange);
-      hCSave->SetMinimum(minrange-0.2*minrange);      
+      hCSave->SetMinimum(minrange-0.2*minrange);
+      hCSave->SetXTitle(axislabel);
       cout << "HISTOGRAMS " << corr_histos.size() << endl;
-      TString out_filename = input_dir+"plots/"+mode+"_"+var+"_Dratio.png";
-      RatioPlotter(corr_histos[0],corr_histos[1],corr_histos[2],out_filename);
+      TString out_filename = input_dir+"plots_ratio/"+var+"_"+mode+"_Dratio.png";
+      RatioPlotter(corr_histos[0],corr_histos[1],corr_histos[2],out_filename,m_simulation);
     }
     
 
