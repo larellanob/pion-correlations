@@ -60,18 +60,34 @@ void ridge_plot(TH2F h2, TString pre, TString post)
 {
   TCanvas *c1 = new TCanvas("c1","mi cambas",1000,1000);
   c1->SetLeftMargin(0.14);
-  gStyle->SetOptStat(0);
+  //gStyle->SetOptStat(0);
   h2.Draw("surf1");
 
   // aesthetics
 
-  double theta = -50;
-  double phi   = 70;
+  //soumya angles
+  //double theta = -50;
+  //double phi   = 70;
 
+  // h1 angles
+  double theta = 140;
+  double phi   = 40;
+
+  
+  TString axisx, axisy;
+  axisx = h2.GetXaxis()->GetTitle();
+  axisy = h2.GetYaxis()->GetTitle();
   h2.GetXaxis()->CenterTitle(true);
-  h2.GetXaxis()->SetTitleOffset(1.5);
+  h2.GetXaxis()->SetTitleOffset(2.2);
+  if ( axisx == "#Delta#phiPQboosted2" ) {
+    h2.GetXaxis()->SetTitle("#Delta#phi_{CoM} [deg]");
+  }
   h2.GetYaxis()->CenterTitle(true);
-  h2.GetYaxis()->SetTitleOffset(2.0);
+  h2.GetYaxis()->SetTitleOffset(1.8);
+  if ( axisy == "#Delta#y" ) {
+    h2.GetYaxis()->SetTitle("#Delta y_{CoM}");
+  }
+ 
   // main 2d plot 
   c1->SaveAs(pre+post);
   gPad->GetView()->RotateView(theta,phi);

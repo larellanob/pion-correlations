@@ -6,10 +6,11 @@ void export_hist(TH1 * h2, TString out_filename);
 void recoplots(TCorrelation *t, TString target, TString gMode, TString var);
 TString gDirName = "/home/luciano/Physics/CLAS/pion_correlation/";
 bool m_simulation = false;
+Float_t gDataCap  = 0.1; // fraction of data to be used in analysis (1.0 == full data)
 
 //void run_analysis( TString filename = "/home/luciano/Physics/CLAS/pion_ridge/data/2pcPairs_D_zhpm.root" )
 
-void run_analysis( TString centroid_s = "",TString target = "C", TString gMode = "zhpm")
+void run_analysis( TString centroid_s = "",TString target = "D", TString gMode = "ptlead")
 {
   if ( m_simulation ) {
     cout << "running in simulation mode!" << endl;
@@ -70,29 +71,102 @@ void run_analysis( TString centroid_s = "",TString target = "C", TString gMode =
   int rhos = 0;
   //while ( triggersp.Next() && events < 1.0*entries  && events < 800000) {
 
-  while ( triggers.Next() ) {
+
+
+  std::vector<std::vector<Float_t>> old_events_phi;
+  std::vector<std::vector<Float_t>> old_aux_phi;
+
+  std::vector<std::vector<Float_t >> old_events_the;
+  std::vector<std::vector<Float_t >> old_aux_the;
+
+  std::vector<std::vector<Float_t >> old_events_rap;
+  std::vector<std::vector<Float_t >> old_aux_rap;
+
+  std::vector<int> old_sizes_vector;
+  std::vector<int> old_aux_sizes;
+
+  while ( triggers.Next()  && events < (gDataCap*entries) ) {
     events++;
     t_size = pid_t.GetSize();
 
-
+    
     // you can get "old partners" by working here, before partners.Next()
-
+    
     /// Mixed Event Pairs
     if ( centroid == 0 ) {
       rho_warning= true;
     }
+
+    if ( events > 1 && rho_warning ) {
+      std::vector<Float_t> valuephi;
+      std::vector<Float_t> valuethe;
+      std::vector<Float_t> valuerap;
+      for ( int o = 0; o < p_size; o++ ) {
+	valuephi.push_back(PhiBoo_p[o]);
+	valuethe.push_back(TheBoo_p[o]);
+	valuerap.push_back(RapBoo_p[o]);
+      }
+      
+      if ( old_events_phi.size() < 10 ) {
+
+	old_events_phi.push_back(valuephi);
+	old_events_the.push_back(valuethe);
+	old_events_rap.push_back(valuerap);
+	old_sizes_vector.push_back(p_size);
+      } else {
+	old_aux_phi = old_events_phi;
+	old_aux_the = old_events_the;
+	old_aux_rap = old_events_rap;
+	old_aux_sizes = old_sizes_vector;
+	old_events_phi.clear();
+	old_events_the.clear();
+	old_events_rap.clear();
+	old_sizes_vector.clear();
+	for ( int i = 0; i < 9; i++ ) {
+	  old_events_phi.push_back(old_aux_phi[i+1]);
+	  old_events_the.push_back(old_aux_the[i+1]);
+	  old_events_rap.push_back(old_aux_rap[i+1]);
+	  old_sizes_vector.push_back(old_aux_sizes[i+1]);
+	}
+	old_events_phi.push_back(valuephi);
+	old_events_the.push_back(valuethe);
+	old_events_rap.push_back(valuerap);
+	old_sizes_vector.push_back(p_size);
+      }
+      
+    }
+    
+    /*    
     if ( events > 1  && rho_warning ) {
       for ( int t = 0; t < t_size; t++ ) {
 	for ( int o = 0; o < p_size; o++ ) {
 	  Float_t DPhi,DThe,DRap;
 	  DPhi = DeltaAngle(PhiBoo_t[t],PhiBoo_p[o]);
 	  DThe = DeltaAngle(TheBoo_t[t],TheBoo_p[o]);
-	  DRap = RapBoo_t[t]-RapBoo_p[o];
+	  DRap = abs(RapBoo_t[t]-RapBoo_p[o]);
 	  corr_boo->FillMulti(DPhi,DThe);
 	  corr_rap->FillMulti(DPhi,DRap);
 	}
       }
     }
+    */
+
+    if ( events > 1  && rho_warning ) {
+      for ( int t = 0; t < t_size; t++ ) {
+	for ( int v = 0; v < old_events_phi.size(); v++ ) {
+	  int old_size = old_sizes_vector[v];
+	  for ( int o = 0; o < old_size; o++ ) {
+	    Float_t DPhi,DThe,DRap;
+	    DPhi = DeltaAngle(PhiBoo_t[t],old_events_phi[v][o]);
+	    DThe = DeltaAngle(TheBoo_t[t],old_events_the[v][o]);
+	    DRap = abs(RapBoo_t[t]-old_events_rap[v][o]);
+	    corr_boo->FillMulti(DPhi,DThe);
+	    corr_rap->FillMulti(DPhi,DRap);
+	  }
+	}
+      }
+    }
+
 
     partners.Next();
     int old_p_size = p_size;
@@ -150,7 +224,7 @@ void run_analysis( TString centroid_s = "",TString target = "C", TString gMode =
 	Float_t DPhi,DThe,DRap;
 	DPhi = DeltaAngle(PhiBoo_t[t],PhiBoo_p[p]);
 	DThe = DeltaAngle(TheBoo_t[t],TheBoo_p[p]);
-	DRap = RapBoo_t[t]-RapBoo_p[p];
+	DRap = abs(RapBoo_t[t]-RapBoo_p[p]);
 	corr_boo->FillSame(DPhi,DThe);
 	corr_rap->FillSame(DPhi,DRap);
       }
@@ -192,15 +266,15 @@ void run_analysis( TString centroid_s = "",TString target = "C", TString gMode =
   
   TString ridge_corr1 = gDirName+"plots_ridge/";
   TString ridge_corr2 = gMode+"_"+target+"_"+ridge_vars+"_corr.png";
-  ridge_plot(corr_rap->GetCO(),ridge_corr1,ridge_corr2);
+  ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2);
 
   TString ridge_mult1 = gDirName+"plots_ridge/";
   TString ridge_mult2 = gMode+"_"+target+"_"+ridge_vars+"_mult.png";
-  ridge_plot(corr_rap->GetME(),ridge_mult1,ridge_mult2);
+  ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2);
   
   TString ridge_same1 = gDirName+"plots_ridge/";
   TString ridge_same2 = gMode+"_"+target+"_"+ridge_vars+"_same.png";
-  ridge_plot(corr_rap->GetSE(),ridge_same1,ridge_same2);
+  ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2);
   
 
   TCanvas *cinv = new TCanvas();

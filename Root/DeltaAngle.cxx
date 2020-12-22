@@ -11,6 +11,5 @@ Float_t DeltaAngle(Float_t x, Float_t y)
   if ( result > 180. ) {
     result = 360.-result;
   }
-
   return result;
 }

@@ -8,6 +8,10 @@ private:
   TH2F fRecoTriggers;
   TH2F fRecoPartners;
 
+  TH2F fCorrMirrored2D;
+  TH2F fSameMirrored2D;
+  TH2F fMultMirrored2D;
+  
   TH1F fSameEvent1D1;
   TH1F fMultiEvent1D1;
   TH1F fCorrelation1D1;
@@ -32,9 +36,9 @@ private:
   double fBinMinY = 0.;
   //int fNbinsDeltax = 32;
   int fNbinsDeltax = 16;
-  int fNbinsDeltay = fNbinsDeltax;
+  int fNbinsDeltay = 16;
   double fBinMaxDeltaX = 180.;
-  double fBinMinDeltaX = 0;
+  double fBinMinDeltaX = 0.;
   double fBinMaxDeltaY = 180.;
   double fBinMinDeltaY = -20;
   
@@ -47,6 +51,9 @@ public:
   TH2F GetRecoTriggers()   { return fRecoTriggers; }
   TH2F GetRecoPartners()   { return fRecoPartners; }
   TH2F GetCorr() { return fCorrelation2D; }
+  TH2F GetCorrMirror() { return fCorrMirrored2D; }
+  TH2F GetSameMirror() { return fSameMirrored2D; }
+  TH2F GetMultMirror() { return fMultMirrored2D; }
   TH1F GetCorr1D(int i = 1) {
     if ( i == 2 ) {
       return fCorrelation1D2;
@@ -113,16 +120,20 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
   fVar1 = var1;
   fVar2 = var2;
   if ( var1 == "y" ) {
-    fBinMaxX = 4.;
-    fBinMinX = -3;
-    fBinMinDeltaX = -3;
-    fBinMaxDeltaX = 3;
+    fBinMaxX = 3.6;
+    fBinMinX = -3.6;
+    fNbinsx = 28;
+    fBinMinDeltaX = 0.;
+    fBinMaxDeltaX = 3.6;
+    fNbinsDeltax = 12;
   }
   if ( var2 == "y" ) {
-    fBinMaxY = 4.;
-    fBinMinY = -3;
-    fBinMinDeltaY = -3;
-    fBinMaxDeltaY = 3;
+    fBinMaxY = 3.6;
+    fBinMinY = -3.6;
+    fNbinsy = 28;
+    fBinMinDeltaY = 0.;
+    fBinMaxDeltaY = 3.6;
+    fNbinsDeltay = 12;
   }
   
   fTarget = target;
@@ -192,10 +203,8 @@ void TCorrelation::FillCorrelation()
       float nsvalue = fSameEvent2D.GetBinContent(x,y);
       float nmvalue = fMultiEvent2D.GetBinContent(x,y);
       if ( nsvalue < 5.0 || nmvalue < 5.0 ) {
-	//ndiv.SetBinContent(x,y,settle_at);
-	ndiv.Fill(bcx,bcy,settle_at);
+	//ndiv.Fill(bcx,bcy,settle_at);
       } else {
-	//ndiv.SetBinContent(x,y,nsvalue/nmvalue);
 	ndiv.Fill(bcx,bcy,nsvalue/nmvalue);
       }
       if ( nmvalue != 0 && nsvalue != 0) {
@@ -205,6 +214,57 @@ void TCorrelation::FillCorrelation()
 
     }
   }
+
+  // mirrored histogram for display purposes
+  int xshift = (fBinMaxDeltaX-fBinMinDeltaX)/2.0;
+  int yshift = (fBinMaxDeltaY-fBinMinDeltaY)/2.0;
+  TH2F nmirror("mirrored_n_c"+fVar1+"_"+fVar2+"_"+fTarget,
+	       "N_{s1}/N_{m}(#Delta#"+fVar1+", #Delta#"+fVar2+");#Delta#"+fVar1+";#Delta#"+fVar2,
+	       2*fNbinsDeltax,fBinMinDeltaX-xshift,fBinMaxDeltaX+xshift,
+	       2*fNbinsDeltay,-fBinMaxDeltaY,fBinMaxDeltaY);
+  TH2F nsmirror("mirrored_n_s"+fVar1+"_"+fVar2+"_"+fTarget,
+	       "N_{s1}/N_{m}(#Delta#"+fVar1+", #Delta#"+fVar2+");#Delta#"+fVar1+";#Delta#"+fVar2,
+	       2*fNbinsDeltax,fBinMinDeltaX-xshift,fBinMaxDeltaX+xshift,
+	       2*fNbinsDeltay,-fBinMaxDeltaY,fBinMaxDeltaY);
+  TH2F nmmirror("mirrored_n_m"+fVar1+"_"+fVar2+"_"+fTarget,
+	       "N_{s1}/N_{m}(#Delta#"+fVar1+", #Delta#"+fVar2+");#Delta#"+fVar1+";#Delta#"+fVar2,
+	       2*fNbinsDeltax,fBinMinDeltaX-xshift,fBinMaxDeltaX+xshift,
+	       2*fNbinsDeltay,-fBinMaxDeltaY,fBinMaxDeltaY);
+  for ( int x = 1; x < fNbinsDeltax+1; x++ ) {
+    double bcx = (ndiv.GetXaxis()->GetBinCenter(x));
+    for ( int y = 1; y < fNbinsDeltay+1; y++ ) {
+      double bcy = (ndiv.GetYaxis()->GetBinCenter(y));
+      double corrcontent = ndiv.GetBinContent(x,y);
+      double samecontent = fSameEvent2D.GetBinContent(x,y);
+      double multcontent = fMultiEvent2D.GetBinContent(x,y);
+      //copy
+      nmirror.SetBinContent(x+(fNbinsDeltax/2),y+fNbinsDeltay,corrcontent);
+      nsmirror.SetBinContent(x+(fNbinsDeltax/2),y+fNbinsDeltay,samecontent);
+      nmmirror.SetBinContent(x+(fNbinsDeltax/2),y+fNbinsDeltay,multcontent);
+
+      // -90 < phi < 0
+      nmirror.SetBinContent((fNbinsDeltax/2)-x+1,y+fNbinsDeltay,corrcontent);
+      nmirror.SetBinContent((fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,corrcontent);
+      nsmirror.SetBinContent((fNbinsDeltax/2)-x+1,y+fNbinsDeltay,samecontent);
+      nsmirror.SetBinContent((fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,samecontent);
+      nmmirror.SetBinContent((fNbinsDeltax/2)-x+1,y+fNbinsDeltay,multcontent);
+      nmmirror.SetBinContent((fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,multcontent);
+
+      // 0 < phi < 180, -4 < y < 0
+      nmirror.SetBinContent(x+(fNbinsDeltax/2),fNbinsDeltay-y+1,corrcontent);
+      nsmirror.SetBinContent(x+(fNbinsDeltax/2),fNbinsDeltay-y+1,samecontent);
+      nmmirror.SetBinContent(x+(fNbinsDeltax/2),fNbinsDeltay-y+1,multcontent);
+      
+      // 180 < phi
+      nmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,y+fNbinsDeltay,corrcontent);
+      nmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,corrcontent);
+      nsmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,y+fNbinsDeltay,samecontent);
+      nsmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,samecontent);
+      nmmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,y+fNbinsDeltay,multcontent);
+      nmmirror.SetBinContent(2*fNbinsDeltax+(fNbinsDeltax/2)-x+1,fNbinsDeltay-y+1,multcontent);
+    }
+  }
+  
 
   // 1 d histograms
   double num;
@@ -248,6 +308,9 @@ void TCorrelation::FillCorrelation()
   fCorrelation1D1 = h1;
   fCorrelation1D2 = h2;
   fCorrelation2D = ndiv;
+  fCorrMirrored2D = nmirror;
+  fSameMirrored2D = nsmirror;
+  fMultMirrored2D = nmmirror;
 }
 
 
