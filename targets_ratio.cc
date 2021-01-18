@@ -1,6 +1,6 @@
 #include "Root/RatioPlotter.cc"
 
-bool m_simulation = true;
+bool m_simulation = false;
 
 void targets_ratio()
 {
@@ -14,9 +14,12 @@ void targets_ratio()
      //"pp",
      //"pm",
      "ptlead",
-     //"zhlead",
-     "zhpp",
-     "zhpm",
+     "zhlead",
+     //"zhpp",
+     //"zhpm",
+     "zh3",
+     "zh2",
+     "zh1",
      /*
      "ppp",
      "zh0002pp",

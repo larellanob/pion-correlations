@@ -13,7 +13,7 @@
 #include "Root/DeltaAngleRad.cxx"
 
 bool m_debug      = false;
-bool m_simulation = true;
+bool m_simulation = false;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
 Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
@@ -51,11 +51,12 @@ void tpc_file_generator(TString mode = "", TString target = "")
   }
 
   // Chain for hadrons (ch) and chain for triggers electrons (ech)
-  TChain ch;
+  TChain ch("tree_data");
+  /*
   if ( !m_simulation ) {
     ch.Add("tree_data");
   }
-    
+  */
   TChain ech("e_rec");
 
   // Add files to the chains depending on target
@@ -491,8 +492,61 @@ void tpc_file_generator(TString mode = "", TString target = "")
 	  partners_index.push_back(i);
 	}
       }
+    } else if ( gMode == "zh3" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && Zh[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && Zh[i] > 0.25 && Zh[i] < 0.4 ) {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "zh2" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && Zh[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && Zh[i] > 0.12 && Zh[i] < 0.25 ) {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "zh1" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && Zh[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && Zh[i] > 0.0 && Zh[i] < 0.12 ) {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "pt3" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && pt[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && pt[i] > 0.3 && pt[i] < 0.4 ) {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "pt2" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && pt[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && pt[i] > 0.2 && pt[i] < 0.3 ) {
+	  partners_index.push_back(i);
+	}
+      }
+    } else if ( gMode == "pt1" ) {
+      for ( UInt_t i = 0; i < pid.GetSize(); i++ ) {
+	if ( abs(pid[i]) == 211  && pt[i] > 0.4 ) {
+	  triggers_index.push_back(i);
+	}
+	if ( abs(pid[i]) == 211 && pt[i] > 0.0 && pt[i] < 0.2 ) {
+	  partners_index.push_back(i);
+	}
+      }
     }
-
 
     if ( triggers_index.size() != 0 ) {
       total_triggers++;

@@ -1,6 +1,6 @@
 #include "Root/Plotter.cc"
 
-bool m_simulation = true;
+bool m_simulation = false;
 
 void multi_plotter_2pcs()
 {
@@ -11,10 +11,29 @@ void multi_plotter_2pcs()
     {
      //"pp",
      //"pm",
-     "ptlead",
+     //"ptlead",
      //"zhlead",
-     "zhpp",
-     "zhpm",
+     /*
+     "pt3",
+     "pt2",
+     "pt1",
+     */
+     /*
+     "zh3",
+     "zh2",
+     "zh1",
+     */
+     /*
+     "zh3ycut",
+     "zh2ycut",
+     "zh1ycut",
+     */
+     "pt3ycut",
+     "pt2ycut",
+     "pt1ycut",
+
+       //"zhpp",
+     //"zhpm",
      /*
      "ppp",
      "zh0002pp",
@@ -38,9 +57,9 @@ void multi_plotter_2pcs()
 
   std::vector <TString> var =
     {
-     "phiPQboosted",
+     "phiPQboosted2",
      "y",
-     "thetaPQboosted",
+     //"thetaPQboosted",
     };
   
   TString input_dir = "/home/luciano/Physics/CLAS/pion_correlation/";
@@ -51,6 +70,8 @@ void multi_plotter_2pcs()
   TH1F *h1;
   TH1F *h2;
   TH1F *h3;
+  TH2F *ridge;
+
   std::vector<TH1F *>corr_histos;
   std::vector<TH1F *>same_histos;
   std::vector<TH1F *>mult_histos;
@@ -64,25 +85,30 @@ void multi_plotter_2pcs()
       corr_histos.clear();
       same_histos.clear();
       mult_histos.clear();
-      if ( j == "phiPQboosted" ) {
-	stylized = "#phi_{PQ}";
-	f->Open(input_dir+"histograms/alltarg_"+i+"__boo.root");
+      if ( j == "phiPQboosted2" ) {
+	stylized = "#Delta#phi_{PQ} (deg)";
+	f->Open(input_dir+"histograms/alltarg_"+i+"__rap.root");
       } else if ( j == "y" ) {
-	stylized = "y";
+	stylized = "#Delta y";
 	f->Open(input_dir+"histograms/alltarg_"+i+"__rap.root");
       } else if ( j == "thetaPQboosted" ) {
-	stylized = "#theta_{PQ}";
+	stylized = "#Delta#theta_{PQ} (deg)";
 	f->Open(input_dir+"histograms/alltarg_"+i+"__boo.root");
       }
       int target_counter=0;
       
-      double rangeh1 = 0;
+      double rangeh1max = 0;
+      double rangeh1min = 1000000;
       double rangeh23 = 0;
       for ( TString k: targets ) {
 	h1 = (TH1F*)gDirectory->Get("nc_"+j+"_"+k);
-	if ( h1->GetMaximum() > rangeh1 ) {
-	  rangeh1 = h1->GetMaximum();
+	if ( h1->GetMaximum() > rangeh1max ) {
+	  rangeh1max = h1->GetMaximum();
 	}
+	if ( h1->GetMinimum() < rangeh1min ) {
+	  rangeh1min = h1->GetMinimum();
+	}
+	
 	h2 = (TH1F*)gDirectory->Get("ns_"+j+"_"+k);
 	if ( h2->GetMaximum() > rangeh23 ) {
 	  rangeh23 = h2->GetMaximum();
@@ -100,8 +126,16 @@ void multi_plotter_2pcs()
 	}
       }
 
-      h1->SetMaximum(2.05);
-      h1->SetMinimum(0);
+      //h1->SetMaximum(2.05);
+      /*
+      h1->SetMaximum(rangeh1max+0.05*rangeh1max);
+      h1->SetMinimum(rangeh1min-0.05*rangeh1min);
+      */
+
+      h1->SetMaximum(0.40);
+      h1->SetMinimum(0.02);
+
+      h1->GetXaxis()->SetTitle(stylized);
       h2->SetMaximum(rangeh23+0.1*rangeh23);
       h3->SetMaximum(rangeh23+0.1*rangeh23);
       cout << TString::Format("modes <%s> var <%s> max %.1f",i.Data(),j.Data(),rangeh23) << endl;
@@ -111,10 +145,12 @@ void multi_plotter_2pcs()
 	h1 = (TH1F*)gDirectory->Get("nc_"+j+"_"+k);
 	h1->Draw("E0X0 same");
 	corr_histos.push_back(h1);
+
       }
+
       h1->GetYaxis()->SetTitle("N_{s}/N_{m}");
       TString out_filename = input_dir+"plots/"+i+"_"+j+"_corr.png";
-      Plotter(corr_histos[0],corr_histos[1],corr_histos[2],corr_histos[3],out_filename);
+      Plotter(corr_histos[0],corr_histos[1],corr_histos[2],corr_histos[3],out_filename,i);
 
       for ( TString k: targets ) {
 	h2 = (TH1F*)gDirectory->Get("ns_"+j+"_"+k);
@@ -124,7 +160,7 @@ void multi_plotter_2pcs()
       h2->SetMinimum(0);
       h2->GetYaxis()->SetTitle("N_{s}");
       TString out_filename2 = input_dir+"plots/"+i+"_"+j+"_same.png";
-      Plotter(same_histos[0],same_histos[1],same_histos[2],same_histos[3],out_filename2);
+      Plotter(same_histos[0],same_histos[1],same_histos[2],same_histos[3],out_filename2,i);
 
       
 
@@ -136,8 +172,35 @@ void multi_plotter_2pcs()
       h3->SetMinimum(0);
       h3->GetYaxis()->SetTitle("N_{m}");
       TString out_filename3 = input_dir+"plots/"+i+"_"+j+"_mult.png";
-      Plotter(mult_histos[0],mult_histos[1],mult_histos[2],mult_histos[3],out_filename3);
+      Plotter(mult_histos[0],mult_histos[1],mult_histos[2],mult_histos[3],out_filename3,i);
+    }
+    // f->close??
+    f->Open(input_dir+"histograms/alltarg_"+i+"__rap.root");
+
+
+    
+    for ( TString targ: targets ) {
+      // same
+      ridge = (TH2F*)gDirectory->Get("mirrored_n_sphiPQboosted2_y_"+targ);
+      //void ridge_plot(TH2F h2, TString pre, TString post,TString target)
+      TString pre = input_dir+"plots_ridge2/";
+      //TString axi = (TString)ridge->GetXaxis()->GetTitle()+"_"+(TString)ridge->GetYaxis()->GetTitle();
+      TString axi = "phi-y";
+      TString pos = i+"_"+targ+"_"+axi+"_same.png";
+      ridge_plot(*ridge,pre,pos,targ,i);
+
+      // multi
+      ridge = (TH2F*)gDirectory->Get("mirrored_n_mphiPQboosted2_y_"+targ);
+      pos = i+"_"+targ+"_"+axi+"_mult.png";
+      ridge_plot(*ridge,pre,pos,targ,i);
+
+      // corr
+      ridge = (TH2F*)gDirectory->Get("mirrored_n_cphiPQboosted2_y_"+targ);
+      pos = i+"_"+targ+"_"+axi+"_corr.png";
+      ridge_plot(*ridge,pre,pos,targ,i);
     }
     
+
+   
   }
 }

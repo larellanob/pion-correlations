@@ -6,11 +6,11 @@ void export_hist(TH1 * h2, TString out_filename);
 void recoplots(TCorrelation *t, TString target, TString gMode, TString var);
 TString gDirName = "/home/luciano/Physics/CLAS/pion_correlation/";
 bool m_simulation = false;
-Float_t gDataCap  = 0.1; // fraction of data to be used in analysis (1.0 == full data)
+Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
 
 //void run_analysis( TString filename = "/home/luciano/Physics/CLAS/pion_ridge/data/2pcPairs_D_zhpm.root" )
 
-void run_analysis( TString centroid_s = "",TString target = "D", TString gMode = "ptlead")
+void run_analysis( TString centroid_s = "",TString target = "Pb", TString gMode = "pt3")
 {
   if ( m_simulation ) {
     cout << "running in simulation mode!" << endl;
@@ -85,6 +85,40 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
   std::vector<int> old_sizes_vector;
   std::vector<int> old_aux_sizes;
 
+  TH2F h2mix("h2mix","",16,0,180,8,0,2.4);
+  bool high_mult = true;
+  UInt_t pairs = 0;
+
+
+  // zh bins biases
+  double zbias = 0;
+  if ( target == "D" && gMode == "zh1") {
+    zbias = 1.578;
+  } else if ( target == "D" && gMode == "zh2") {
+    zbias = 0.9759;
+  } else if ( target == "D" && gMode == "zh3") {
+    zbias = 0.5042;
+  } else if ( target == "C" && gMode == "zh1") {
+    zbias = 1.606;
+  } else if ( target == "C" && gMode == "zh2") {
+    zbias = 1.003;
+  } else if ( target == "C" && gMode == "zh3") {
+    zbias = 0.4939;
+  } else if ( target == "Fe" && gMode == "zh1") {
+    zbias = 1.510;
+  } else if ( target == "Fe" && gMode == "zh2") {
+    zbias = 0.969;
+  } else if ( target == "Fe" && gMode == "zh3") {
+    zbias = 0.4806;
+  } else if ( target == "Pb" && gMode == "zh1") {
+    zbias = 1.496;
+  } else if ( target == "Pb" && gMode == "zh2") {
+    zbias = 0.9623;
+  } else if ( target == "Pb" && gMode == "zh3") {
+    zbias = 0.5376;
+  } 
+  
+  
   while ( triggers.Next()  && events < (gDataCap*entries) ) {
     events++;
     t_size = pid_t.GetSize();
@@ -97,7 +131,7 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
       rho_warning= true;
     }
 
-    if ( events > 1 && rho_warning ) {
+    if ( events > 1 && rho_warning && high_mult ) {
       std::vector<Float_t> valuephi;
       std::vector<Float_t> valuethe;
       std::vector<Float_t> valuerap;
@@ -151,7 +185,8 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
     }
     */
 
-    if ( events > 1  && rho_warning ) {
+    h2mix.Reset();
+    if ( events > 1  && rho_warning && high_mult ) {
       for ( int t = 0; t < t_size; t++ ) {
 	for ( int v = 0; v < old_events_phi.size(); v++ ) {
 	  int old_size = old_sizes_vector[v];
@@ -159,9 +194,10 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
 	    Float_t DPhi,DThe,DRap;
 	    DPhi = DeltaAngle(PhiBoo_t[t],old_events_phi[v][o]);
 	    DThe = DeltaAngle(TheBoo_t[t],old_events_the[v][o]);
-	    DRap = abs(RapBoo_t[t]-old_events_rap[v][o]);
+	    DRap = RapBoo_t[t]-old_events_rap[v][o];
 	    corr_boo->FillMulti(DPhi,DThe);
-	    corr_rap->FillMulti(DPhi,DRap);
+	    corr_rap->FillMulti(DPhi,abs(DRap-zbias));
+	    h2mix.Fill(DPhi,DRap);
 	  }
 	}
       }
@@ -171,6 +207,17 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
     partners.Next();
     int old_p_size = p_size;
     p_size = pid_p.GetSize();
+
+    // high multiplicity
+    /*
+    if ( p_size < 2 ) {
+      high_mult = false;
+      continue;
+    } else {
+      high_mult = true;
+    }
+    */
+    pairs++;
     // rho veto
 
     rho_warning = false;
@@ -224,9 +271,20 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
 	Float_t DPhi,DThe,DRap;
 	DPhi = DeltaAngle(PhiBoo_t[t],PhiBoo_p[p]);
 	DThe = DeltaAngle(TheBoo_t[t],TheBoo_p[p]);
-	DRap = abs(RapBoo_t[t]-RapBoo_p[p]);
+	DRap = RapBoo_t[t]-RapBoo_p[p];
 	corr_boo->FillSame(DPhi,DThe);
-	corr_rap->FillSame(DPhi,DRap);
+	corr_rap->FillSame(DPhi,abs(DRap-zbias));
+	double instant_mixed = 0;
+	instant_mixed = h2mix.GetBinContent(h2mix.FindBin(DPhi,DRap));
+	double instant_mixed0 = 0;
+	instant_mixed = h2mix.GetBinContent(h2mix.FindBin(0,0));
+	if ( instant_mixed != 0 ) {
+	  //double filler = instant_mixed0/instant_mixed;
+	  double filler = 1.0/instant_mixed;
+	  corr_rap->FillInstantRidge(DPhi,DRap,filler);
+	} else {
+	  corr_rap->FillInstantRidge(DPhi,DRap);
+	}
       }
       fill_neg = false;
     }
@@ -235,6 +293,8 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
     
   }
   cout << "rhos " << rhos << endl;
+  cout << "from total events " << events << endl;
+  cout << "found this many pairs " << pairs << endl;
   corr_boo->FillCorrelation();
   corr_rap->FillCorrelation();
 
@@ -245,6 +305,12 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
   corr_boo->GetSame1D(2).Write();
   corr_boo->GetMult1D(1).Write();
   corr_boo->GetMult1D(2).Write();
+  corr_boo->GetCorrMirror().Write();
+  corr_boo->GetMultMirror().Write();
+  corr_boo->GetSameMirror().Write();
+  corr_boo->GetCorrMirrorphi().Write();
+  corr_boo->GetMultMirrorphi().Write();
+  corr_boo->GetSameMirrorphi().Write();
   
   TFile * fout2 = new TFile(gDirName+"histograms/hist_"+target+"_"+gMode+"_"+centroid_s+"_rap.root","recreate");
   corr_rap->GetCorr1D(1).Write();
@@ -253,7 +319,13 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
   corr_rap->GetSame1D(2).Write();
   corr_rap->GetMult1D(1).Write();
   corr_rap->GetMult1D(2).Write();
-
+  corr_rap->GetCorrMirror().Write();
+  corr_rap->GetMultMirror().Write();
+  corr_rap->GetSameMirror().Write();
+  corr_boo->GetCorrMirrorphi().Write();
+  corr_boo->GetMultMirrorphi().Write();
+  corr_boo->GetSameMirrorphi().Write();
+  
   // Reconstructed pions plots
   // initialization of arbitrary TH2Fs to get from corr_*
   recoplots(corr_boo,target, gMode, "boo");
@@ -266,16 +338,23 @@ void run_analysis( TString centroid_s = "",TString target = "D", TString gMode =
   
   TString ridge_corr1 = gDirName+"plots_ridge/";
   TString ridge_corr2 = gMode+"_"+target+"_"+ridge_vars+"_corr.png";
-  ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2);
+  //ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode);
+  ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode);
 
   TString ridge_mult1 = gDirName+"plots_ridge/";
   TString ridge_mult2 = gMode+"_"+target+"_"+ridge_vars+"_mult.png";
-  ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2);
+  ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2,target,gMode);
   
   TString ridge_same1 = gDirName+"plots_ridge/";
   TString ridge_same2 = gMode+"_"+target+"_"+ridge_vars+"_same.png";
-  ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2);
+  ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2,target,gMode);
+
+  corr_rap->ScaleInsta(1./pairs);
   
+  TString ridge_inst1 = gDirName+"plots_ridge/";
+  TString ridge_inst2 = gMode+"_"+target+"_"+ridge_vars+"_inst.png";
+  ridge_plot(corr_rap->GetInstMirror(),ridge_inst1,ridge_inst2,target,gMode);
+
 
   TCanvas *cinv = new TCanvas();
   h_inv_mass.Draw();
