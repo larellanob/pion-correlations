@@ -6,6 +6,7 @@ void export_hist(TH1 * h2, TString out_filename);
 void recoplots(TCorrelation *t, TString target, TString gMode, TString var);
 TString gDirName = "/home/luciano/Physics/CLAS/pion_correlation/";
 bool m_simulation = false;
+bool gMirror = true;
 Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
 
 //void run_analysis( TString filename = "/home/luciano/Physics/CLAS/pion_ridge/data/2pcPairs_D_zhpm.root" )
@@ -92,32 +93,59 @@ void run_analysis( TString centroid_s = "",TString target = "Pb", TString gMode 
 
   // zh bins biases
   double zbias = 0;
-  if ( target == "D" && gMode == "zh1") {
-    zbias = 1.578;
-  } else if ( target == "D" && gMode == "zh2") {
-    zbias = 0.9759;
-  } else if ( target == "D" && gMode == "zh3") {
-    zbias = 0.5042;
-  } else if ( target == "C" && gMode == "zh1") {
-    zbias = 1.606;
-  } else if ( target == "C" && gMode == "zh2") {
-    zbias = 1.003;
-  } else if ( target == "C" && gMode == "zh3") {
-    zbias = 0.4939;
-  } else if ( target == "Fe" && gMode == "zh1") {
-    zbias = 1.510;
-  } else if ( target == "Fe" && gMode == "zh2") {
-    zbias = 0.969;
-  } else if ( target == "Fe" && gMode == "zh3") {
-    zbias = 0.4806;
-  } else if ( target == "Pb" && gMode == "zh1") {
-    zbias = 1.496;
-  } else if ( target == "Pb" && gMode == "zh2") {
-    zbias = 0.9623;
-  } else if ( target == "Pb" && gMode == "zh3") {
-    zbias = 0.5376;
-  } 
-  
+  if ( !m_simulation && gMirror ) {
+    if ( target == "D" && gMode == "zh1") {
+      zbias = 1.521;
+    } else if ( target == "D" && gMode == "zh2") {
+      zbias = 0.9432;
+    } else if ( target == "D" && gMode == "zh3") {
+      zbias = 0.4351;
+    } else if ( target == "C" && gMode == "zh1") {
+      zbias = 1.661;
+    } else if ( target == "C" && gMode == "zh2") {
+      zbias = 0.9911;
+    } else if ( target == "C" && gMode == "zh3") {
+      zbias = 0.4347;
+    } else if ( target == "Fe" && gMode == "zh1") {
+      zbias = 1.507;
+    } else if ( target == "Fe" && gMode == "zh2") {
+      zbias = 1.009;
+    } else if ( target == "Fe" && gMode == "zh3") {
+      zbias = 0.4779;
+    } else if ( target == "Pb" && gMode == "zh1") {
+      zbias = 1.415;
+    } else if ( target == "Pb" && gMode == "zh2") {
+      zbias = 0.9739;
+    } else if ( target == "Pb" && gMode == "zh3") {
+      zbias = 0.4943;
+    } 
+  }  else if ( m_simulation && gMirror ) {
+    if ( target == "D" && gMode == "zh1") {
+      zbias = 1.577;
+    } else if ( target == "D" && gMode == "zh2") {
+      zbias = 0.8392;
+    } else if ( target == "D" && gMode == "zh3") {
+      zbias = 0.4448;
+    } else if ( target == "C" && gMode == "zh1") {
+      zbias = 1.573;
+    } else if ( target == "C" && gMode == "zh2") {
+      zbias = 0.8445;
+    } else if ( target == "C" && gMode == "zh3") {
+      zbias = 0.4491;
+    } else if ( target == "Fe" && gMode == "zh1") {
+      zbias = 1.559;
+    } else if ( target == "Fe" && gMode == "zh2") {
+      zbias = 0.9012;
+    } else if ( target == "Fe" && gMode == "zh3") {
+      zbias = 0.4577;
+    } else if ( target == "Pb" && gMode == "zh1") {
+      zbias = 1.543;
+    } else if ( target == "Pb" && gMode == "zh2") {
+      zbias = 0.8243;
+    } else if ( target == "Pb" && gMode == "zh3") {
+      zbias = 0.4371;
+    } 
+  }
   
   while ( triggers.Next()  && events < (gDataCap*entries) ) {
     events++;
@@ -196,7 +224,11 @@ void run_analysis( TString centroid_s = "",TString target = "Pb", TString gMode 
 	    DThe = DeltaAngle(TheBoo_t[t],old_events_the[v][o]);
 	    DRap = RapBoo_t[t]-old_events_rap[v][o];
 	    corr_boo->FillMulti(DPhi,DThe);
-	    corr_rap->FillMulti(DPhi,abs(DRap-zbias));
+	    if ( !gMirror ) {
+	      corr_rap->FillMulti(DPhi,DRap-zbias);
+	    } else if ( gMirror ) {
+	      corr_rap->FillMulti(DPhi,abs(DRap-zbias));
+	    }
 	    h2mix.Fill(DPhi,DRap);
 	  }
 	}
@@ -273,7 +305,11 @@ void run_analysis( TString centroid_s = "",TString target = "Pb", TString gMode 
 	DThe = DeltaAngle(TheBoo_t[t],TheBoo_p[p]);
 	DRap = RapBoo_t[t]-RapBoo_p[p];
 	corr_boo->FillSame(DPhi,DThe);
-	corr_rap->FillSame(DPhi,abs(DRap-zbias));
+	if ( !gMirror ) {
+	  corr_rap->FillSame(DPhi,DRap-zbias);
+	} else if ( gMirror ) {
+	  corr_rap->FillSame(DPhi,abs(DRap-zbias));
+	}
 	double instant_mixed = 0;
 	instant_mixed = h2mix.GetBinContent(h2mix.FindBin(DPhi,DRap));
 	double instant_mixed0 = 0;
@@ -335,26 +371,43 @@ void run_analysis( TString centroid_s = "",TString target = "Pb", TString gMode 
 
   // Ridge plots
   TString ridge_vars = corr_rap->GetVar(1)+"_"+corr_rap->GetVar(2);
-  
   TString ridge_corr1 = gDirName+"plots_ridge/";
   TString ridge_corr2 = gMode+"_"+target+"_"+ridge_vars+"_corr.png";
-  //ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode);
-  ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode);
-
   TString ridge_mult1 = gDirName+"plots_ridge/";
   TString ridge_mult2 = gMode+"_"+target+"_"+ridge_vars+"_mult.png";
-  ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2,target,gMode);
-  
   TString ridge_same1 = gDirName+"plots_ridge/";
   TString ridge_same2 = gMode+"_"+target+"_"+ridge_vars+"_same.png";
-  ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2,target,gMode);
-
+  // data
+  if ( !m_simulation ) {
+    //ridge_plot(corr_rap->GetCorr(),ridge_corr1,ridge_corr2,target,gMode);
+    if ( !gMirror ) {
+      ridge_plot(corr_rap->GetCO(),ridge_corr1,ridge_corr2,target,gMode);
+      ridge_plot(corr_rap->GetME(),ridge_mult1,ridge_mult2,target,gMode);
+      ridge_plot(corr_rap->GetSE(),ridge_same1,ridge_same2,target,gMode);
+    } else if ( gMirror ) {
+      ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode);
+      ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2,target,gMode);
+      ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2,target,gMode);
+    }
+  } else if ( m_simulation ) {
+    //ridge_plot(corr_rap->GetCorr(),ridge_corr1,ridge_corr2,target,gMode);
+    if ( !gMirror ) {
+      ridge_plot(corr_rap->GetCO(),ridge_corr1,ridge_corr2,target,gMode,true);
+      ridge_plot(corr_rap->GetME(),ridge_mult1,ridge_mult2,target,gMode,true);
+      ridge_plot(corr_rap->GetSE(),ridge_same1,ridge_same2,target,gMode,true);
+    } else if ( gMirror ) {
+      ridge_plot(corr_rap->GetCorrMirror(),ridge_corr1,ridge_corr2,target,gMode,true);
+      ridge_plot(corr_rap->GetMultMirror(),ridge_mult1,ridge_mult2,target,gMode,true);
+      ridge_plot(corr_rap->GetSameMirror(),ridge_same1,ridge_same2,target,gMode,true);
+    }
+  }
   corr_rap->ScaleInsta(1./pairs);
-  
+
+  /*
   TString ridge_inst1 = gDirName+"plots_ridge/";
   TString ridge_inst2 = gMode+"_"+target+"_"+ridge_vars+"_inst.png";
-  ridge_plot(corr_rap->GetInstMirror(),ridge_inst1,ridge_inst2,target,gMode);
-
+  ridge_plot(corr_rap->GetInst(),ridge_inst1,ridge_inst2,target,gMode);
+  */
 
   TCanvas *cinv = new TCanvas();
   h_inv_mass.Draw();

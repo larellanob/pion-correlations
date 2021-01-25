@@ -94,16 +94,16 @@ public:
   }
   void FillSame(Float_t var1, Float_t var2, Float_t weight = 1) {
     fSameEvent2D.Fill(var1,var2, weight);
-    //if ( abs(var2) > 1.0 ) {
+    if ( abs(var2) > 1.0 ) {
       fSameEvent1D1.Fill(var1,weight);
-      //}
+    }
     fSameEvent1D2.Fill(var2,weight);
   }
   void FillMulti(Float_t var1, Float_t var2, Float_t weight = 1) {
     fMultiEvent2D.Fill(var1,var2, weight);
-    //if ( abs(var2) > 1.0 ) {
+    if ( abs(var2) > 1.0 ) {
       fMultiEvent1D1.Fill(var1, weight);
-      //}
+    }
     fMultiEvent1D2.Fill(var2, weight);
   }
   void FillInstantRidge(Float_t var1, Float_t var2, Float_t weight = 1 ) {
@@ -138,21 +138,23 @@ TCorrelation::TCorrelation(TString var1, TString var2, TString target)
 {
   fVar1 = var1;
   fVar2 = var2;
+  /*
   if ( var1 == "y" ) {
-    fBinMaxX = 2.1;
-    fBinMinX = -2.1;
-    fNbinsx = 14;
-    fBinMinDeltaX = 0;
-    fBinMaxDeltaX = 2.1;
-    fNbinsDeltax = 7;
+    fBinMaxX = 4.8;
+    fBinMinX = -4.8;
+    fNbinsx = 32;
+    fBinMinDeltaX = -4.8;
+    fBinMaxDeltaX = 4.8;
+    fNbinsDeltax = 32;
   }
+  */
   if ( var2 == "y" ) {
-    fBinMaxY = 2.1;
-    fBinMinY = -2.1;
-    fNbinsy = 14;
+    fBinMaxY = 4.8;
+    fBinMinY = -4.8;
+    fNbinsy = 32;
     fBinMinDeltaY = 0;
-    fBinMaxDeltaY = 2.1;
-    fNbinsDeltay = 7;
+    fBinMaxDeltaY = 4.8;
+    fNbinsDeltay = 16;
   }
   
   fTarget = target;
@@ -229,10 +231,14 @@ void TCorrelation::FillCorrelation()
       double bcy = (ndiv.GetYaxis()->GetBinCenter(y));
       float nsvalue = fSameEvent2D.GetBinContent(x,y);
       float nmvalue = fMultiEvent2D.GetBinContent(x,y);
-      if ( nsvalue < 5.0 || nmvalue < 5.0 ) {
+      if ( nsvalue < 1.0 || nmvalue < 25.0 ) {
 	//ndiv.Fill(bcx,bcy,settle_at);
       } else {
 	ndiv.Fill(bcx,bcy,nsvalue/nmvalue);
+	if ( nsvalue/nmvalue > 0.3 ) {
+	  cout << "PEAKING " << nsvalue << " " << nmvalue << endl;
+	  cout << bcx << " " << bcy << endl;
+	}
       }
       if ( nmvalue != 0 && nsvalue != 0) {
 	error1 = (nsvalue/nmvalue)*sqrt( (1./nsvalue) + (1./nmvalue) );

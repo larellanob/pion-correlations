@@ -16,7 +16,7 @@ bool m_debug      = false;
 bool m_simulation = false;
 bool old_triggers     = false; // if false, use old_partners
 bool DMode        = false; // deuterium
-Float_t gDataCap  = 1.0; // fraction of data to be used in analysis (1.0 == full data)
+Float_t gDataCap  = 0.01; // fraction of data to be used in analysis (1.0 == full data)
 TDatabasePDG db;
 // modes
 // pp: trigger pi+ no cuts, assoc pi+ no cuts
@@ -32,7 +32,7 @@ Float_t DeltaAngleRad(Float_t x_rad, Float_t y_rad);
 
 
 // MAIN
-void tpc_file_generator(TString mode = "", TString target = "")
+void tpc_file_generator(TString mode = "zh1", TString target = "Pb")
 {
   if ( mode == "" ) {
     cout << "No mode input, using zhpm as default" << endl;
@@ -189,7 +189,7 @@ void tpc_file_generator(TString mode = "", TString target = "")
   // Export ttrees
   TFile out_tree;
   if ( !m_simulation ) {
-    out_tree.Open("/home/luciano/Physics/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
+    out_tree.Open("/home/luciano/Physics/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+"TEST.root", "RECREATE");
   } else {
     out_tree.Open("/eos/user/a/arellano/CLAS/pion_correlation/2pcPairs/2pcPairs_"+target+"_"+gMode+".root", "RECREATE");
     if ( m_debug) {
@@ -639,6 +639,11 @@ void tpc_file_generator(TString mode = "", TString target = "")
       y_w1.push_back(aux_boost.Y());
       z_w1.push_back(aux_boost.Z());
       theboo_w1.push_back(aux_boost.Theta()*180./TMath::Pi());
+      cout << "trig theta" << endl;
+      cout << aux_rotation.Theta()*180./TMath::Pi() << endl;
+      cout << aux_boost.Theta()*180./TMath::Pi() << endl;
+      cout << ThetaPQ[triggers_index[i]] << endl;
+      cout << "-----------------------------" << endl;
       phiboo_w1.push_back(aux_boost.Phi()*180./TMath::Pi());
       rap_w1.push_back(0.5* log((aux_boost.E()+aux_boost.Z()) / (aux_boost.E()-aux_boost.Z())) );
       Pt_w1.push_back(sqrt(aux_boost.X()*aux_boost.X()+aux_boost.Y()*aux_boost.Y()));
@@ -672,6 +677,12 @@ void tpc_file_generator(TString mode = "", TString target = "")
       y_w2.push_back(aux_boost.Y());
       z_w2.push_back(aux_boost.Z());
       theboo_w2.push_back(aux_boost.Theta()*180./TMath::Pi());
+      cout << "parner theta" << endl;
+      cout << aux_rotation.Theta()*180./TMath::Pi() << endl;
+      cout << aux_boost.Theta()*180./TMath::Pi() << endl;
+      cout << ThetaPQ[partners_index[i]] << endl;
+      cout << "-----------------------------" << endl;
+
       phiboo_w2.push_back(aux_boost.Phi()*180./TMath::Pi());
       rap_w2.push_back(0.5* log((aux_boost.E()+aux_boost.Z()) / (aux_boost.E()-aux_boost.Z())) );
       Pt_w2.push_back(sqrt(aux_boost.X()*aux_boost.X()+aux_boost.Y()*aux_boost.Y()));

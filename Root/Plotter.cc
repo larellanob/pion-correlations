@@ -104,7 +104,7 @@ void LatexText(Double_t x, Double_t y, int font, TString text)
 
 
 
-void ridge_plot(TH2F h2, TString pre, TString post,TString target, TString gmode)
+void ridge_plot(TH2F h2, TString pre, TString post,TString target, TString gmode, bool m_simul = false)
 {
   TCanvas *c1 = new TCanvas("c1","mi cambas",1000,1000);
   //c1->SetLeftMargin(0.14);
@@ -135,8 +135,12 @@ void ridge_plot(TH2F h2, TString pre, TString post,TString target, TString gmode
   } else if ( histname.Contains("n_s") ) {
     zaxis = "N_{s}";
   }
-  
-  LatexText(0.03,0.95,62,"EG2 data");
+
+  if ( !m_simul ) {
+    LatexText(0.03,0.95,62,"EG2 data");
+  } else if ( m_simul ) {
+    LatexText(0.03,0.95,62,"EG2 simulation");
+  }
   LatexText(0.03,0.90,42,target+" target");
 
   TString zhrange;
